@@ -26,34 +26,34 @@ All colors MUST be HSL.
     --secondary: 271 76% 95%;   /* Light purple for secondary */
     --secondary-foreground: 271 76% 20%;
 
-    --muted: 0 0% 95%;          /* Light muted background */
-    --muted-foreground: 0 0% 35%; /* Dark muted text */
+    --muted: 0 0% 96%;          /* Slightly lighter muted background */
+    --muted-foreground: 0 0% 40%; /* Darker muted text for better contrast */
 
-    --accent: 271 76% 95%;      /* Light accent */
-    --accent-foreground: 271 76% 20%;
+    --accent: 271 76% 92%;      /* Light accent */
+    --accent-foreground: 271 76% 25%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 271 30% 85%;      /* Light border */
-    --input: 0 0% 95%;
+    --border: 0 0% 90%;         /* Lighter border for better visibility */
+    --input: 0 0% 96%;
     --ring: 271 76% 53%;
 
     --radius: 1rem;
 
-    /* Light Mode Glassmorphism */
+    /* Light Mode Glassmorphism - Enhanced */
     --glass-bg: 255 255 255;
-    --glass-opacity: 0.8;
+    --glass-opacity: 0.85;
     --glass-border: 271 76% 53%;
-    --glass-border-opacity: 0.15;
+    --glass-border-opacity: 0.2;
     
     /* Light Mode Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(271 76% 53%), hsl(271 76% 65%));
-    --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
+    --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.8));
     
     /* Light Mode Glow Effects */
-    --glow-primary: 0 0 20px hsl(271 76% 53% / 0.2);
-    --glow-intense: 0 0 40px hsl(271 76% 53% / 0.3);
+    --glow-primary: 0 0 20px hsl(271 76% 53% / 0.25);
+    --glow-intense: 0 0 40px hsl(271 76% 53% / 0.35);
   }
 
   .dark {
@@ -110,6 +110,36 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  /* Glass effect utilities */
+  .glass {
+    background: rgba(var(--glass-bg), var(--glass-opacity));
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(var(--glass-border), var(--glass-border-opacity));
+  }
+
+  .glass-hover:hover {
+    background: rgba(var(--glass-bg), calc(var(--glass-opacity) + 0.05));
+    border-color: rgba(var(--glass-border), calc(var(--glass-border-opacity) + 0.1));
+  }
+
+  /* Gradient utilities */
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-glass {
+    background: var(--gradient-glass);
+  }
+
+  /* Glow effects */
+  .glow {
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-intense {
+    box-shadow: var(--glow-intense);
   }
 }
