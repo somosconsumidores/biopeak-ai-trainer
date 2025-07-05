@@ -43,10 +43,16 @@ Deno.serve(async (req) => {
     
     console.log('Initial origin detected:', origin)
     
-    // Force biopeak-ai.com for production
-    if (!origin || origin.includes('lovableproject.com')) {
-      origin = 'https://biopeak-ai.com'
-      console.log('Forced origin to biopeak-ai.com')
+    // Use the appropriate domain based on the request
+    if (!origin || origin.includes('lovableproject.com') || origin.includes('biopeak-ai.com')) {
+      if (origin && origin.includes('lovable')) {
+        // Keep lovable preview domain
+        console.log('Using preview domain:', origin)
+      } else {
+        // Use production domain
+        origin = 'https://biopeak-ai.com'
+        console.log('Using production domain: biopeak-ai.com')
+      }
     }
     
     console.log('Final redirect URI origin:', origin)
