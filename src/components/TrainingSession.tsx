@@ -1,9 +1,49 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Activity, Clock, Calendar, ChartBar, Settings } from "lucide-react";
+import { Activity, Clock, Calendar, ChartBar, Settings, Upload } from "lucide-react";
+import { useState } from "react";
+import GpxUploader from "@/components/GpxUploader";
+import GpxDataViewer from "@/components/GpxDataViewer";
+import { type GpxData } from "@/hooks/useGpxParser";
 
 const TrainingSession = () => {
+  const [showGpxUploader, setShowGpxUploader] = useState(false);
+  const [gpxData, setGpxData] = useState<GpxData | null>(null);
+
+  const handleGpxParsed = (data: GpxData) => {
+    setGpxData(data);
+    setShowGpxUploader(false);
+  };
+
+  if (gpxData) {
+    return (
+      <div className="p-6">
+        <GpxDataViewer 
+          gpxData={gpxData} 
+          onClose={() => setGpxData(null)} 
+        />
+      </div>
+    );
+  }
+
+  if (showGpxUploader) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">Importar Treino GPX</h1>
+            <p className="text-muted-foreground">Importe dados reais do seu dispositivo Garmin ou Strava</p>
+          </div>
+          <Button variant="glass" onClick={() => setShowGpxUploader(false)}>
+            Voltar
+          </Button>
+        </div>
+        <GpxUploader onGpxParsed={handleGpxParsed} />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -20,6 +60,10 @@ const TrainingSession = () => {
           <Button variant="ai" size="sm">
             <Settings className="w-4 h-4 mr-2" />
             Analisar com IA
+          </Button>
+          <Button variant="hero" size="sm" onClick={() => setShowGpxUploader(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Importar GPX
           </Button>
         </div>
       </div>
