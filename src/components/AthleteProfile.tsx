@@ -1,12 +1,85 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { User, Settings, Activity, ChartBar } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import EditProfileForm from "./EditProfileForm";
 
+interface ProfileData {
+  id: string;
+  display_name: string | null;
+  birth_date: string | null;
+  height: number | null;
+  weight: number | null;
+  bio: string | null;
+  sport_preferences: string[] | null;
+}
+
 const AthleteProfile = () => {
+  const { user } = useAuth();
   const [showEditForm, setShowEditForm] = useState(false);
+  const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const calculateAge = (birthDate: string | null): number | null => {
+    if (!birthDate) return null;
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    
+    return age > 0 ? age : null;
+  };
+
+  const calculateBMI = (height: number | null, weight: number | null): number | null => {
+    if (!height || !weight) return null;
+    const heightInMeters = height / 100;
+    return Math.round((weight / (heightInMeters * heightInMeters)) * 10) / 10;
+  };
+
+  const loadProfile = async () => {
+    if (!user) return;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error loading profile:", error);
+        return;
+      }
+
+      setProfileData(data);
+    } catch (error) {
+      console.error("Error loading profile:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfile();
+  }, [user]);
+
+  const handleEditFormClose = () => {
+    setShowEditForm(false);
+    loadProfile(); // Reload profile data after editing
+  };
+
+  const age = calculateAge(profileData?.birth_date);
+  const bmi = calculateBMI(profileData?.height, profileData?.weight);
+  const displayName = profileData?.display_name || "Atleta";
+  const sportPreferences = profileData?.sport_preferences?.join(", ") || "Não informado";
 
   return (
     <div className="p-6 space-y-6">
@@ -39,29 +112,46 @@ const AthleteProfile = () => {
               <User className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-foreground">João Silva</h2>
-              <p className="text-muted-foreground">Corredor • Nível Avançado</p>
+              <h2 className="text-2xl font-bold text-foreground">{displayName}</h2>
+              <p className="text-muted-foreground">{sportPreferences}</p>
             </div>
           </div>
           
-          <div className="space-y-4">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Idade</span>
-              <span className="text-foreground font-medium">32 anos</span>
+          {loading ? (
+            <div className="space-y-4">
+              <div className="h-4 bg-muted/50 rounded animate-pulse"></div>
+              <div className="h-4 bg-muted/50 rounded animate-pulse"></div>
+              <div className="h-4 bg-muted/50 rounded animate-pulse"></div>
+              <div className="h-4 bg-muted/50 rounded animate-pulse"></div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Peso</span>
-              <span className="text-foreground font-medium">75 kg</span>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Idade</span>
+                <span className="text-foreground font-medium">
+                  {age ? `${age} anos` : "Não informado"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Peso</span>
+                <span className="text-foreground font-medium">
+                  {profileData?.weight ? `${profileData.weight} kg` : "Não informado"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Altura</span>
+                <span className="text-foreground font-medium">
+                  {profileData?.height ? `${(profileData.height / 100).toFixed(2)} m` : "Não informado"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">IMC</span>
+                <span className="text-primary font-medium">
+                  {bmi || "Não calculado"}
+                </span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Altura</span>
-              <span className="text-foreground font-medium">1.78 m</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">IMC</span>
-              <span className="text-primary font-medium">23.7</span>
-            </div>
-          </div>
+          )}
         </Card>
 
         <Card className="glass p-6 animate-fade-in" style={{animationDelay: '0.1s'}}>
@@ -291,7 +381,7 @@ const AthleteProfile = () => {
 
       {/* Edit Profile Form Modal */}
       {showEditForm && (
-        <EditProfileForm onClose={() => setShowEditForm(false)} />
+        <EditProfileForm onClose={handleEditFormClose} />
       )}
     </div>
   );
