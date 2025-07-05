@@ -11,45 +11,45 @@ All colors MUST be HSL.
 @layer base {
   :root {
     /* BioPeak Light Mode Theme */
-    --background: 0 0% 98%;     /* Light background */
-    --foreground: 242 71% 8%;   /* Dark text for contrast */
+    --background: 0 0% 96%;     /* Slightly darker background */
+    --foreground: 242 71% 12%;  /* Darker text for better contrast */
 
     --card: 0 0% 100%;
-    --card-foreground: 242 71% 8%;
+    --card-foreground: 242 71% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 242 71% 8%;
+    --popover-foreground: 242 71% 12%;
 
     --primary: 271 76% 53%;     /* Keep vibrant purple */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 271 76% 95%;   /* Light purple for secondary */
-    --secondary-foreground: 271 76% 20%;
+    --secondary: 271 76% 88%;   /* Darker secondary for better contrast */
+    --secondary-foreground: 271 76% 25%;
 
-    --muted: 0 0% 96%;          /* Slightly lighter muted background */
-    --muted-foreground: 0 0% 40%; /* Darker muted text for better contrast */
+    --muted: 0 0% 92%;          /* Darker muted background */
+    --muted-foreground: 0 0% 45%; /* Darker muted text for better contrast */
 
-    --accent: 271 76% 92%;      /* Light accent */
-    --accent-foreground: 271 76% 25%;
+    --accent: 271 76% 88%;      /* Darker accent */
+    --accent-foreground: 271 76% 30%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;         /* Lighter border for better visibility */
-    --input: 0 0% 96%;
+    --border: 0 0% 85%;         /* Darker border for better visibility */
+    --input: 0 0% 94%;          /* Slightly darker input background */
     --ring: 271 76% 53%;
 
     --radius: 1rem;
 
-    /* Light Mode Glassmorphism - Enhanced */
+    /* Light Mode Glassmorphism - Enhanced contrast */
     --glass-bg: 255 255 255;
-    --glass-opacity: 0.85;
-    --glass-border: 271 76% 53%;
-    --glass-border-opacity: 0.2;
+    --glass-opacity: 0.95;      /* Higher opacity for better contrast */
+    --glass-border: 0 0 0;      /* Darker border */
+    --glass-border-opacity: 0.15;
     
     /* Light Mode Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(271 76% 53%), hsl(271 76% 65%));
-    --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.8));
+    --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85));
     
     /* Light Mode Glow Effects */
     --glow-primary: 0 0 20px hsl(271 76% 53% / 0.25);

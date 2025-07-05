@@ -73,18 +73,18 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/20 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-secondary/30 flex items-center justify-center p-4">
       <div className="w-full max-w-md relative">
-        <Card className="glass border-primary/20 shadow-xl backdrop-blur-xl">
+        <Card className="glass border-2 border-border/60 shadow-2xl backdrop-blur-xl bg-card/95">
           {/* Close button */}
           <Button
             variant="ghost"
             size="icon"
-            className="absolute right-4 top-4 z-10 h-8 w-8 rounded-full hover:bg-muted/50"
+            className="absolute right-4 top-4 z-10 h-8 w-8 rounded-full hover:bg-muted/80 border border-border/40"
             onClick={() => navigate('/')}
             aria-label="Fechar"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4 text-muted-foreground" />
           </Button>
 
           <CardHeader className="text-center pb-6">
@@ -105,16 +105,16 @@ const Auth = () => {
           </CardHeader>
           <CardContent className="pt-0">
             <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-8 bg-muted/50 p-1 rounded-xl">
+              <TabsList className="grid w-full grid-cols-2 mb-8 bg-muted/80 p-1 rounded-xl border border-border/40">
                 <TabsTrigger 
                   value="login" 
-                  className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"
+                  className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-border/60 transition-all"
                 >
                   Entrar
                 </TabsTrigger>
                 <TabsTrigger 
                   value="signup"
-                  className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"
+                  className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-border/60 transition-all"
                 >
                   Cadastrar
                 </TabsTrigger>
@@ -124,28 +124,28 @@ const Auth = () => {
                 <form onSubmit={handleSignIn} className="space-y-6">
                   <div className="space-y-3">
                     <Label htmlFor="login-email" className="text-sm font-medium">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="seu@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="h-11 bg-background/50 border-muted focus:border-primary/50 focus:ring-primary/20"
-                      required
-                    />
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="h-11 bg-background border-2 border-border/60 focus:border-primary/60 focus:ring-primary/20 shadow-sm"
+                        required
+                      />
                   </div>
                   <div className="space-y-3">
                     <Label htmlFor="login-password" className="text-sm font-medium">Senha</Label>
                     <div className="relative">
-                      <Input
-                        id="login-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Sua senha"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="h-11 bg-background/50 border-muted focus:border-primary/50 focus:ring-primary/20 pr-10"
-                        required
-                      />
+                        <Input
+                          id="login-password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Sua senha"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="h-11 bg-background border-2 border-border/60 focus:border-primary/60 focus:ring-primary/20 pr-10 shadow-sm"
+                          required
+                        />
                       <Button
                         type="button"
                         variant="ghost"
@@ -171,39 +171,39 @@ const Auth = () => {
                 <form onSubmit={handleSignUp} className="space-y-6">
                   <div className="space-y-3">
                     <Label htmlFor="signup-name" className="text-sm font-medium">Nome</Label>
-                    <Input
-                      id="signup-name"
-                      type="text"
-                      placeholder="Seu nome"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      className="h-11 bg-background/50 border-muted focus:border-primary/50 focus:ring-primary/20"
-                    />
+                      <Input
+                        id="signup-name"
+                        type="text"
+                        placeholder="Seu nome"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        className="h-11 bg-background border-2 border-border/60 focus:border-primary/60 focus:ring-primary/20 shadow-sm"
+                      />
                   </div>
                   <div className="space-y-3">
                     <Label htmlFor="signup-email" className="text-sm font-medium">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="seu@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="h-11 bg-background/50 border-muted focus:border-primary/50 focus:ring-primary/20"
-                      required
-                    />
+                      <Input
+                        id="signup-email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="h-11 bg-background border-2 border-border/60 focus:border-primary/60 focus:ring-primary/20 shadow-sm"
+                        required
+                      />
                   </div>
                   <div className="space-y-3">
                     <Label htmlFor="signup-password" className="text-sm font-medium">Senha</Label>
                     <div className="relative">
-                      <Input
-                        id="signup-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Sua senha"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="h-11 bg-background/50 border-muted focus:border-primary/50 focus:ring-primary/20 pr-10"
-                        required
-                      />
+                        <Input
+                          id="signup-password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Sua senha"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="h-11 bg-background border-2 border-border/60 focus:border-primary/60 focus:ring-primary/20 pr-10 shadow-sm"
+                          required
+                        />
                       <Button
                         type="button"
                         variant="ghost"
