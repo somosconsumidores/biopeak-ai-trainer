@@ -49,7 +49,10 @@ const MobileNavigation = ({ activeView, onViewChange }: MobileNavigationProps) =
             variant="ghost"
             size="sm"
             className="flex flex-col items-center justify-center h-14 w-14 p-1 rounded-xl transition-all text-orange-500 hover:text-orange-400 hover:bg-orange-500/10"
-            onClick={() => navigate('/strava')}
+            onClick={() => {
+              console.log('Strava button clicked - navigating to /strava');
+              navigate('/strava');
+            }}
           >
             <Activity className="w-5 h-5 mb-1" />
             <span className="text-xs font-medium leading-none">Strava</span>

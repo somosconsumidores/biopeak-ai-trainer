@@ -95,7 +95,10 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
             variant="ghost"
             size="sm"
             className="w-full justify-start text-muted-foreground hover:text-foreground hover:text-orange-500"
-            onClick={() => navigate('/strava')}
+            onClick={() => {
+              console.log('Desktop Strava button clicked - navigating to /strava');
+              navigate('/strava');
+            }}
           >
             <Activity className="w-4 h-4 mr-2" />
             Integração Strava
