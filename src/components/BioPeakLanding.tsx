@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, Settings, User, ChartBar } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ui/theme-toggle";
 
 interface BioPeakLandingProps {
@@ -9,6 +11,8 @@ interface BioPeakLandingProps {
 }
 
 const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Particle Background Effect */}
@@ -30,8 +34,14 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
             <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Recursos</a>
             <a href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">Como Funciona</a>
             <ThemeToggle />
-            <Button variant="glass" size="sm">Entrar</Button>
-            <Button variant="hero" size="sm">Começar Grátis</Button>
+            {user ? (
+              <Button variant="hero" size="sm" onClick={onEnterApp}>Dashboard</Button>
+            ) : (
+              <>
+                <Button variant="glass" size="sm" onClick={() => navigate('/auth')}>Entrar</Button>
+                <Button variant="hero" size="sm" onClick={() => navigate('/auth')}>Começar Grátis</Button>
+              </>
+            )}
           </div>
         </nav>
       </header>
@@ -49,10 +59,17 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
             BioPeak usa inteligência artificial para analisar seus dados de treino Garmin e entregar insights que realmente fazem você evoluir. Porque treino é físico, mas evolução é nos dados.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-            <Button variant="hero" size="lg" className="min-w-48" onClick={onEnterApp}>
-              <Activity className="w-5 h-5 mr-2" />
-              Começar Agora
-            </Button>
+            {user ? (
+              <Button variant="hero" size="lg" className="min-w-48" onClick={onEnterApp}>
+                <Activity className="w-5 h-5 mr-2" />
+                Acessar Dashboard
+              </Button>
+            ) : (
+              <Button variant="hero" size="lg" className="min-w-48" onClick={() => navigate('/auth')}>
+                <Activity className="w-5 h-5 mr-2" />
+                Começar Agora
+              </Button>
+            )}
             <Button variant="glass" size="lg" onClick={onEnterApp}>
               Ver Demo
             </Button>
@@ -156,10 +173,17 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
             Conecte seu Garmin e descubra insights que você nunca imaginou sobre seus treinos
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="hero" size="lg" className="min-w-48" onClick={onEnterApp}>
-              <Activity className="w-5 h-5 mr-2" />
-              Conectar Garmin
-            </Button>
+            {user ? (
+              <Button variant="hero" size="lg" className="min-w-48" onClick={onEnterApp}>
+                <Activity className="w-5 h-5 mr-2" />
+                Conectar Garmin
+              </Button>
+            ) : (
+              <Button variant="hero" size="lg" className="min-w-48" onClick={() => navigate('/auth')}>
+                <Activity className="w-5 h-5 mr-2" />
+                Começar Agora
+              </Button>
+            )}
             <Button variant="glass" size="lg" onClick={onEnterApp}>
               Saber Mais
             </Button>

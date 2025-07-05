@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { Activity, LayoutDashboard, ChartBar, Settings, User } from "lucide-react";
+import { Activity, LayoutDashboard, ChartBar, Settings, User, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import ThemeToggle from "@/components/ui/theme-toggle";
 
 interface AppNavigationProps {
@@ -10,6 +12,24 @@ interface AppNavigationProps {
 
 const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { signOut, user } = useAuth();
+  const { toast } = useToast();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast({
+        title: "Logout realizado",
+        description: "Até logo!",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro no logout",
+        description: "Tente novamente",
+        variant: "destructive",
+      });
+    }
+  };
 
   const navigationItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -51,10 +71,33 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
         })}
       </div>
 
+      {/* User Info & Actions */}
+      {!isCollapsed && user && (
+        <div className="mb-4 p-3 glass rounded-lg">
+          <p className="text-sm text-muted-foreground">Olá,</p>
+          <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
+        </div>
+      )}
+
       {/* Theme Toggle */}
       {!isCollapsed && (
         <div className="mb-4">
           <ThemeToggle />
+        </div>
+      )}
+
+      {/* Sign Out Button */}
+      {!isCollapsed && (
+        <div className="mb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground hover:text-foreground"
+            onClick={handleSignOut}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
+          </Button>
         </div>
       )}
 
