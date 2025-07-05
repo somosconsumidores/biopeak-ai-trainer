@@ -141,6 +141,86 @@ export type Database = {
         }
         Relationships: []
       }
+      training_sessions: {
+        Row: {
+          activity_type: string
+          average_heartrate: number | null
+          average_pace: number | null
+          average_speed: number | null
+          calories: number | null
+          created_at: string
+          distance: number | null
+          duration: number
+          elevation_gain: number | null
+          id: string
+          max_heartrate: number | null
+          name: string
+          notes: string | null
+          performance_score: number | null
+          recovery_metrics: Json | null
+          splits_data: Json | null
+          start_date: string
+          strava_activity_id: number | null
+          updated_at: string
+          user_id: string
+          zones_data: Json | null
+        }
+        Insert: {
+          activity_type: string
+          average_heartrate?: number | null
+          average_pace?: number | null
+          average_speed?: number | null
+          calories?: number | null
+          created_at?: string
+          distance?: number | null
+          duration: number
+          elevation_gain?: number | null
+          id?: string
+          max_heartrate?: number | null
+          name: string
+          notes?: string | null
+          performance_score?: number | null
+          recovery_metrics?: Json | null
+          splits_data?: Json | null
+          start_date: string
+          strava_activity_id?: number | null
+          updated_at?: string
+          user_id: string
+          zones_data?: Json | null
+        }
+        Update: {
+          activity_type?: string
+          average_heartrate?: number | null
+          average_pace?: number | null
+          average_speed?: number | null
+          calories?: number | null
+          created_at?: string
+          distance?: number | null
+          duration?: number
+          elevation_gain?: number | null
+          id?: string
+          max_heartrate?: number | null
+          name?: string
+          notes?: string | null
+          performance_score?: number | null
+          recovery_metrics?: Json | null
+          splits_data?: Json | null
+          start_date?: string
+          strava_activity_id?: number | null
+          updated_at?: string
+          user_id?: string
+          zones_data?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_sessions_strava_activity_id_fkey"
+            columns: ["strava_activity_id"]
+            isOneToOne: false
+            referencedRelation: "strava_activities"
+            referencedColumns: ["strava_activity_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

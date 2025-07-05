@@ -1,20 +1,35 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Activity, Clock, Calendar, ChartBar, Settings, Upload } from "lucide-react";
+import { Activity, Clock, Calendar, ChartBar, Settings, Upload, RefreshCw, Zap } from "lucide-react";
 import { useState } from "react";
 import GpxUploader from "@/components/GpxUploader";
 import GpxDataViewer from "@/components/GpxDataViewer";
 import { type GpxData } from "@/hooks/useGpxParser";
+import { useTrainingSessions } from "@/hooks/useTrainingSessions";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const TrainingSession = () => {
   const [showGpxUploader, setShowGpxUploader] = useState(false);
   const [gpxData, setGpxData] = useState<GpxData | null>(null);
+  const { 
+    sessions, 
+    loading, 
+    processingStravaData, 
+    processStravaData, 
+    formatDuration, 
+    formatDistance, 
+    formatPace 
+  } = useTrainingSessions();
 
   const handleGpxParsed = (data: GpxData) => {
     setGpxData(data);
     setShowGpxUploader(false);
   };
+
+  // Get the most recent session for display
+  const currentSession = sessions[0];
 
   if (gpxData) {
     return (
@@ -44,22 +59,38 @@ const TrainingSession = () => {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Carregando sessões de treino...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Sessão de Treino</h1>
-          <p className="text-muted-foreground">Análise detalhada com insights de IA</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Sessões de Treino</h1>
+          <p className="text-muted-foreground">Análise detalhada dos seus treinos do Strava</p>
         </div>
         <div className="flex items-center space-x-3">
-          <Button variant="glass" size="sm">
-            <Calendar className="w-4 h-4 mr-2" />
-            Histórico
-          </Button>
-          <Button variant="ai" size="sm">
-            <Settings className="w-4 h-4 mr-2" />
-            Analisar com IA
+          <Button 
+            variant="glass" 
+            size="sm"
+            onClick={processStravaData}
+            disabled={processingStravaData}
+          >
+            {processingStravaData ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4 mr-2" />
+            )}
+            Processar Strava
           </Button>
           <Button variant="hero" size="sm" onClick={() => setShowGpxUploader(true)}>
             <Upload className="w-4 h-4 mr-2" />
@@ -68,201 +99,220 @@ const TrainingSession = () => {
         </div>
       </div>
 
-      {/* Session Overview */}
-      <Card className="glass p-6 animate-fade-in">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="p-3 bg-primary/20 rounded-lg">
-              <Activity className="w-8 h-8 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Corrida Matinal</h2>
-              <p className="text-muted-foreground">Hoje, 06:30 - 07:15</p>
-            </div>
-          </div>
-          <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-lg px-4 py-2">
-            94% Performance
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div className="text-center">
-            <div className="text-3xl font-bold text-primary mb-1">45:23</div>
-            <p className="text-sm text-muted-foreground flex items-center justify-center">
-              <Clock className="w-4 h-4 mr-1" />
-              Duração
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-primary mb-1">8.2km</div>
-            <p className="text-sm text-muted-foreground">Distância</p>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-primary mb-1">5:32</div>
-            <p className="text-sm text-muted-foreground">Pace Médio</p>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-primary mb-1">420</div>
-            <p className="text-sm text-muted-foreground">Calorias</p>
-          </div>
-        </div>
-      </Card>
-
-      {/* AI Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="glass p-6 animate-slide-up">
-          <div className="flex items-center mb-4">
-            <div className="p-2 bg-primary/20 rounded-lg mr-3">
-              <Settings className="w-5 h-5 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold text-foreground">Análise da IA</h3>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="glass p-4 border-l-4 border-green-500">
-              <h4 className="font-medium text-green-400 mb-2">✓ O que funcionou bem</h4>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Ritmo consistente nos primeiros 5km</li>
-                <li>• Zona cardíaca otimizada (82% do tempo)</li>
-                <li>• Cadência estável em 180 spm</li>
-              </ul>
-            </div>
-
-            <div className="glass p-4 border-l-4 border-yellow-500">
-              <h4 className="font-medium text-yellow-400 mb-2">⚡ Pontos de melhoria</h4>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Queda de ritmo nos últimos 2km</li>
-                <li>• FC subiu muito no km 6-7</li>
-                <li>• Stride length pode ser otimizado</li>
-              </ul>
-            </div>
-
-            <div className="glass p-4 border-l-4 border-blue-500">
-              <h4 className="font-medium text-blue-400 mb-2">🎯 Próxima sessão</h4>
-              <p className="text-sm text-muted-foreground">
-                Treino intervalado: 5x 1km com 2min recuperação. 
-                Foco na manutenção do ritmo em zona 4.
-              </p>
-            </div>
-          </div>
+      {/* No Sessions State */}
+      {sessions.length === 0 && (
+        <Card className="glass p-8 text-center animate-fade-in">
+          <Activity className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-foreground mb-2">Nenhuma sessão encontrada</h3>
+          <p className="text-muted-foreground mb-6">
+            Conecte-se ao Strava e processe seus dados para ver suas sessões de treino aqui.
+          </p>
+          <Button 
+            variant="ai" 
+            onClick={processStravaData}
+            disabled={processingStravaData}
+          >
+            {processingStravaData ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4 mr-2" />
+            )}
+            Processar Dados do Strava
+          </Button>
         </Card>
+      )}
 
-        <Card className="glass p-6 animate-slide-up" style={{animationDelay: '0.2s'}}>
-          <div className="flex items-center mb-4">
-            <div className="p-2 bg-primary/20 rounded-lg mr-3">
-              <ChartBar className="w-5 h-5 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold text-foreground">Métricas Detalhadas</h3>
-          </div>
-
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium text-foreground">Frequência Cardíaca</span>
-                <span className="text-sm text-primary">158 bpm médio</span>
-              </div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 rounded-full w-[75%]"></div>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>Zona 1-2</span>
-                <span>Zona 3-4</span>
-                <span>Zona 5</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium text-foreground">Cadência</span>
-                <span className="text-sm text-primary">180 spm</span>
-              </div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full w-[85%] animate-fade-in"></div>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium text-foreground">Eficiência</span>
-                <span className="text-sm text-primary">92%</span>
-              </div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-green-500 rounded-full w-[92%] animate-fade-in"></div>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium text-foreground">Recuperação Prev.</span>
-                <span className="text-sm text-primary">18 horas</span>
-              </div>
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Rápida</Badge>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Performance Chart */}
-      <Card className="glass p-6 animate-fade-in">
-        <h3 className="text-xl font-semibold text-foreground mb-4">Gráfico de Performance</h3>
-        <div className="h-64 bg-gradient-to-t from-primary/5 to-transparent rounded-lg p-4 relative overflow-hidden">
-          {/* Simulated Pace Chart */}
-          <div className="absolute bottom-4 left-4 right-4">
-            <div className="flex items-end justify-between h-40">
-              {[85, 88, 92, 90, 87, 82, 78, 85].map((height, index) => (
-                <div key={index} className="flex flex-col items-center">
-                  <div 
-                    className="w-6 bg-primary rounded-t-lg transition-all duration-1000 animate-slide-up"
-                    style={{
-                      height: `${height}%`,
-                      animationDelay: `${index * 0.1}s`
-                    }}
-                  ></div>
-                  <span className="text-xs text-muted-foreground mt-2">
-                    {index + 1}km
-                  </span>
+      {/* Current Session Overview */}
+      {currentSession && (
+        <>
+          <Card className="glass p-6 animate-fade-in">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-primary/20 rounded-lg">
+                  <Activity className="w-8 h-8 text-primary" />
                 </div>
-              ))}
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground">{currentSession.name}</h2>
+                  <p className="text-muted-foreground">
+                    {format(new Date(currentSession.start_date), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                  </p>
+                </div>
+              </div>
+              {currentSession.performance_score && (
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-lg px-4 py-2">
+                  {Math.round(currentSession.performance_score)}% Performance
+                </Badge>
+              )}
             </div>
-          </div>
-        </div>
-      </Card>
 
-      {/* Recovery Feedback */}
-      <Card className="glass p-6 animate-slide-up">
-        <div className="flex items-center mb-4">
-          <div className="p-2 bg-primary/20 rounded-lg mr-3">
-            <Activity className="w-5 h-5 text-primary" />
-          </div>
-          <h3 className="text-xl font-semibold text-foreground">Feedback de Recuperação</h3>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="glass p-4 text-center">
-            <div className="text-2xl font-bold text-green-400 mb-2">Ótima</div>
-            <p className="text-sm text-muted-foreground">Hidratação</p>
-            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-green-500 rounded-full w-[95%]"></div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-primary mb-1">
+                  {formatDuration(currentSession.duration)}
+                </div>
+                <p className="text-sm text-muted-foreground flex items-center justify-center">
+                  <Clock className="w-4 h-4 mr-1" />
+                  Duração
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-primary mb-1">
+                  {formatDistance(currentSession.distance)}
+                </div>
+                <p className="text-sm text-muted-foreground">Distância</p>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-primary mb-1">
+                  {formatPace(currentSession.average_pace)}
+                </div>
+                <p className="text-sm text-muted-foreground">Pace Médio</p>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-primary mb-1">
+                  {currentSession.calories ? Math.round(currentSession.calories) : '-'}
+                </div>
+                <p className="text-sm text-muted-foreground">Calorias</p>
+              </div>
             </div>
+          </Card>
+
+          {/* Detailed Metrics */}
+          <Card className="glass p-6 animate-slide-up">
+            <div className="flex items-center mb-4">
+              <div className="p-2 bg-primary/20 rounded-lg mr-3">
+                <ChartBar className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold text-foreground">Métricas Detalhadas</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {currentSession.average_heartrate && (
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">Frequência Cardíaca</span>
+                    <span className="text-sm text-primary">{currentSession.average_heartrate} bpm médio</span>
+                  </div>
+                  <div className="h-3 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 rounded-full w-[75%]"></div>
+                  </div>
+                </div>
+              )}
+
+              {currentSession.elevation_gain && (
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">Elevação</span>
+                    <span className="text-sm text-primary">{Math.round(currentSession.elevation_gain)}m</span>
+                  </div>
+                  <div className="h-3 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full w-[60%] animate-fade-in"></div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm font-medium text-foreground">Tipo</span>
+                  <span className="text-sm text-primary">{currentSession.activity_type}</span>
+                </div>
+                <Badge variant="outline">{currentSession.activity_type}</Badge>
+              </div>
+
+              {currentSession.recovery_metrics && (
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">Recuperação Prev.</span>
+                    <span className="text-sm text-primary">
+                      {currentSession.recovery_metrics.estimated_recovery_time}h
+                    </span>
+                  </div>
+                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                    {currentSession.recovery_metrics.hydration_status}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Recovery Feedback */}
+          {currentSession.recovery_metrics && (
+            <Card className="glass p-6 animate-slide-up">
+              <div className="flex items-center mb-4">
+                <div className="p-2 bg-primary/20 rounded-lg mr-3">
+                  <Activity className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="text-xl font-semibold text-foreground">Feedback de Recuperação</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="glass p-4 text-center">
+                  <div className="text-2xl font-bold text-green-400 mb-2">
+                    {currentSession.recovery_metrics.hydration_status}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Hidratação</p>
+                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-green-500 rounded-full w-[85%]"></div>
+                  </div>
+                </div>
+                
+                <div className="glass p-4 text-center">
+                  <div className="text-2xl font-bold text-yellow-400 mb-2">
+                    {currentSession.recovery_metrics.muscle_fatigue}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Fadiga Muscular</p>
+                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-yellow-500 rounded-full w-[65%]"></div>
+                  </div>
+                </div>
+                
+                <div className="glass p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-400 mb-2">
+                    {currentSession.recovery_metrics.stress_score}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Score de Stress</p>
+                  <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 rounded-full w-[70%]"></div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Recent Sessions List */}
+      {sessions.length > 1 && (
+        <Card className="glass p-6 animate-fade-in">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-foreground">Sessões Recentes</h3>
+            <Badge variant="outline">{sessions.length} sessões</Badge>
           </div>
           
-          <div className="glass p-4 text-center">
-            <div className="text-2xl font-bold text-yellow-400 mb-2">Moderada</div>
-            <p className="text-sm text-muted-foreground">Fadiga Muscular</p>
-            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-yellow-500 rounded-full w-[65%]"></div>
-            </div>
+          <div className="space-y-3">
+            {sessions.slice(1, 6).map((session, index) => (
+              <div key={session.id} className="glass p-4 rounded-lg flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Activity className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-foreground">{session.name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {format(new Date(session.start_date), "dd/MM", { locale: ptBR })} • 
+                      {formatDuration(session.duration)} • {formatDistance(session.distance)}
+                    </p>
+                  </div>
+                </div>
+                {session.performance_score && (
+                  <Badge className="bg-primary/20 text-primary border-primary/30">
+                    {Math.round(session.performance_score)}%
+                  </Badge>
+                )}
+              </div>
+            ))}
           </div>
-          
-          <div className="glass p-4 text-center">
-            <div className="text-2xl font-bold text-green-400 mb-2">Excelente</div>
-            <p className="text-sm text-muted-foreground">FC Recuperação</p>
-            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-green-500 rounded-full w-[88%]"></div>
-            </div>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 };
