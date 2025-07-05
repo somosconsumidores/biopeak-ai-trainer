@@ -47,7 +47,12 @@ Deno.serve(async (req) => {
     console.log('Returning Strava client ID for user:', user.id)
 
     // Get the origin from the request headers to use the correct domain
-    const origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/') || 'https://biopeak-ai.com'
+    let origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+    
+    // Force biopeak-ai.com for production
+    if (!origin || origin.includes('lovableproject.com')) {
+      origin = 'https://biopeak-ai.com'
+    }
     
     console.log('Using redirect URI origin:', origin)
 
