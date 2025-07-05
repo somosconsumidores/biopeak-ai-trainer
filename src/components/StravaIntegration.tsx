@@ -15,14 +15,37 @@ const StravaIntegration = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const CLIENT_ID = "137080"; // Replace with your actual Strava client ID
-  const REDIRECT_URI = `${window.location.origin}/`;
+  const [stravaConfig, setStravaConfig] = useState<{clientId: string, redirectUri: string} | null>(null);
 
   useEffect(() => {
-    checkStravaConnection();
-    loadActivities();
+    if (user) {
+      loadStravaConfig();
+      checkStravaConnection();
+      loadActivities();
+    }
   }, [user]);
+
+  const loadStravaConfig = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('strava-config');
+      
+      if (error) {
+        console.error('Error loading Strava config:', error);
+        toast.error('Erro ao carregar configuração do Strava');
+        return;
+      }
+
+      if (data?.clientId) {
+        setStravaConfig(data);
+      } else {
+        console.error('No client ID received from config');
+        toast.error('Configuração do Strava não encontrada');
+      }
+    } catch (error) {
+      console.error('Error loading Strava config:', error);
+      toast.error('Erro ao carregar configuração do Strava');
+    }
+  };
 
   const checkStravaConnection = async () => {
     if (!user) return;
@@ -64,8 +87,15 @@ const StravaIntegration = () => {
   };
 
   const handleStravaConnect = () => {
+    if (!stravaConfig) {
+      toast.error('Configuração do Strava não carregada. Tente novamente.');
+      return;
+    }
+
     const scope = 'read,activity:read_all';
-    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&approval_prompt=force&scope=${scope}`;
+    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(stravaConfig.redirectUri)}&approval_prompt=force&scope=${scope}`;
+    
+    console.log('Redirecting to Strava auth:', authUrl);
     
     // Store connection state
     localStorage.setItem('strava_connecting', 'true');
@@ -77,25 +107,33 @@ const StravaIntegration = () => {
     setIsConnecting(true);
     
     try {
+      console.log('Processing Strava callback with code:', code);
+      
       const { data, error } = await supabase.functions.invoke('strava-auth', {
         body: { code }
       });
 
-      if (error) throw error;
+      console.log('Strava auth response:', { data, error });
 
-      if (data.success) {
+      if (error) {
+        console.error('Strava auth error:', error);
+        throw error;
+      }
+
+      if (data?.success) {
         setIsConnected(true);
-        toast.success(`Conectado ao Strava com sucesso! Bem-vindo, ${data.athlete.firstname}!`);
+        toast.success(`Conectado ao Strava com sucesso! Bem-vindo, ${data.athlete?.firstname || 'Atleta'}!`);
         localStorage.removeItem('strava_connecting');
         
         // Automatically sync activities after connection
-        handleSync();
+        setTimeout(() => handleSync(), 1000);
       } else {
-        throw new Error('Failed to connect to Strava');
+        console.error('Strava auth failed:', data);
+        throw new Error(data?.error || 'Failed to connect to Strava');
       }
     } catch (error) {
       console.error('Error connecting to Strava:', error);
-      toast.error('Erro ao conectar com Strava. Tente novamente.');
+      toast.error(`Erro ao conectar com Strava: ${error.message || 'Tente novamente.'}`);
       localStorage.removeItem('strava_connecting');
     } finally {
       setIsConnecting(false);
@@ -103,24 +141,35 @@ const StravaIntegration = () => {
   };
 
   const handleSync = async () => {
-    if (!isConnected) return;
+    if (!isConnected) {
+      toast.error('Conecte-se ao Strava primeiro.');
+      return;
+    }
 
     setIsSyncing(true);
     
     try {
+      console.log('Starting Strava sync...');
+      
       const { data, error } = await supabase.functions.invoke('strava-sync');
 
-      if (error) throw error;
+      console.log('Strava sync response:', { data, error });
 
-      if (data.success) {
+      if (error) {
+        console.error('Strava sync error:', error);
+        throw error;
+      }
+
+      if (data?.success) {
         toast.success(`${data.synced} atividades sincronizadas com sucesso!`);
         loadActivities(); // Reload activities after sync
       } else {
-        throw new Error('Failed to sync activities');
+        console.error('Strava sync failed:', data);
+        throw new Error(data?.error || 'Failed to sync activities');
       }
     } catch (error) {
       console.error('Error syncing Strava activities:', error);
-      toast.error('Erro ao sincronizar atividades. Tente novamente.');
+      toast.error(`Erro ao sincronizar atividades: ${error.message || 'Tente novamente.'}`);
     } finally {
       setIsSyncing(false);
     }
@@ -191,11 +240,11 @@ const StravaIntegration = () => {
           {!isConnected ? (
             <Button 
               onClick={handleStravaConnect}
-              disabled={isConnecting}
+              disabled={isConnecting || !stravaConfig}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
               <ExternalLink className="w-4 h-4 mr-2" />
-              {isConnecting ? 'Conectando...' : 'Conectar ao Strava'}
+              {isConnecting ? 'Conectando...' : !stravaConfig ? 'Carregando...' : 'Conectar ao Strava'}
             </Button>
           ) : (
             <Button 

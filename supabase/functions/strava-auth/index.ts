@@ -42,7 +42,10 @@ Deno.serve(async (req) => {
 
     const { code } = await req.json()
     
+    console.log('Received authorization code:', code ? 'present' : 'missing')
+    
     if (!code) {
+      console.error('No authorization code provided')
       return new Response(JSON.stringify({ error: 'Authorization code required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -53,6 +56,18 @@ Deno.serve(async (req) => {
     const clientId = Deno.env.get('STRAVA_CLIENT_ID')
     const clientSecret = Deno.env.get('STRAVA_CLIENT_SECRET')
     
+    console.log('Using client ID:', clientId ? 'configured' : 'missing')
+    console.log('Using client secret:', clientSecret ? 'configured' : 'missing')
+    
+    if (!clientId || !clientSecret) {
+      console.error('Missing Strava credentials')
+      return new Response(JSON.stringify({ error: 'Strava credentials not configured' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    
+    console.log('Exchanging code for token...')
     const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -67,8 +82,16 @@ Deno.serve(async (req) => {
     })
 
     if (!tokenResponse.ok) {
-      console.error('Strava token exchange failed:', await tokenResponse.text())
-      return new Response(JSON.stringify({ error: 'Failed to exchange authorization code' }), {
+      const errorText = await tokenResponse.text()
+      console.error('Strava token exchange failed:', {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        body: errorText
+      })
+      return new Response(JSON.stringify({ 
+        error: 'Failed to exchange authorization code',
+        details: errorText 
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

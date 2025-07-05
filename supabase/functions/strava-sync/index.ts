@@ -46,13 +46,24 @@ Deno.serve(async (req) => {
     }
 
     // Get user's Strava tokens
+    console.log('Fetching Strava tokens for user:', user.id)
+    
     const { data: tokenData, error: tokenError } = await supabaseClient
       .from('strava_tokens')
       .select('*')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (tokenError || !tokenData) {
+    if (tokenError) {
+      console.error('Error fetching Strava tokens:', tokenError)
+      return new Response(JSON.stringify({ error: 'Error fetching Strava connection' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (!tokenData) {
+      console.log('No Strava tokens found for user:', user.id)
       return new Response(JSON.stringify({ error: 'Strava not connected' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -65,6 +76,7 @@ Deno.serve(async (req) => {
     let accessToken = tokenData.access_token
 
     if (now >= expiresAt) {
+      console.log('Token expired, refreshing...')
       // Refresh token
       const refreshResponse = await fetch('https://www.strava.com/oauth/token', {
         method: 'POST',
@@ -80,7 +92,15 @@ Deno.serve(async (req) => {
       })
 
       if (!refreshResponse.ok) {
-        return new Response(JSON.stringify({ error: 'Failed to refresh Strava token' }), {
+        const errorText = await refreshResponse.text()
+        console.error('Failed to refresh Strava token:', {
+          status: refreshResponse.status,
+          body: errorText
+        })
+        return new Response(JSON.stringify({ 
+          error: 'Failed to refresh Strava token',
+          details: errorText 
+        }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
@@ -101,6 +121,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch activities from Strava
+    console.log('Fetching activities from Strava...')
     const activitiesResponse = await fetch(
       'https://www.strava.com/api/v3/athlete/activities?per_page=50',
       {
