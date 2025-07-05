@@ -60,8 +60,11 @@ Deno.serve(async (req) => {
     console.log('Using client secret:', clientSecret ? 'configured' : 'missing')
     
     if (!clientId || !clientSecret) {
-      console.error('Missing Strava credentials')
-      return new Response(JSON.stringify({ error: 'Strava credentials not configured' }), {
+      console.error('Missing Strava credentials - Client ID:', !!clientId, 'Client Secret:', !!clientSecret)
+      return new Response(JSON.stringify({ 
+        error: 'Strava credentials not configured',
+        details: `Missing: ${!clientId ? 'STRAVA_CLIENT_ID ' : ''}${!clientSecret ? 'STRAVA_CLIENT_SECRET' : ''}`.trim()
+      }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

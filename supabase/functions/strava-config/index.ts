@@ -30,9 +30,15 @@ Deno.serve(async (req) => {
 
     const clientId = Deno.env.get('STRAVA_CLIENT_ID')
     
+    console.log('STRAVA_CLIENT_ID configured:', !!clientId)
+    console.log('Client ID value (first 10 chars):', clientId ? clientId.substring(0, 10) + '...' : 'MISSING')
+    
     if (!clientId) {
       console.error('STRAVA_CLIENT_ID not configured')
-      return new Response(JSON.stringify({ error: 'Strava configuration missing' }), {
+      return new Response(JSON.stringify({ 
+        error: 'Strava configuration missing',
+        details: 'STRAVA_CLIENT_ID não configurado nos secrets do Supabase'
+      }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

@@ -1,1 +1,13 @@
 project_id = "qytorkjmzxscyaefkhnk"
+
+[functions.strava-config]
+verify_jwt = true
+
+[functions.strava-auth]
+verify_jwt = true
+
+[functions.strava-sync]
+verify_jwt = true
+
+[functions.process-training-sessions]
+verify_jwt = true
