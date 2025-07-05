@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Activity, LayoutDashboard, ChartBar, Settings, User } from "lucide-react";
 import { useState } from "react";
+import ThemeToggle from "@/components/ui/theme-toggle";
 
 interface AppNavigationProps {
   activeView: string;
@@ -29,7 +30,7 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
       </div>
 
       {/* Navigation Items */}
-      <div className="space-y-2">
+      <div className="space-y-2 mb-8">
         {navigationItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
@@ -49,6 +50,13 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
           );
         })}
       </div>
+
+      {/* Theme Toggle */}
+      {!isCollapsed && (
+        <div className="mb-4">
+          <ThemeToggle />
+        </div>
+      )}
 
       {/* Collapse Toggle */}
       <div className="absolute bottom-4 left-4 right-4">

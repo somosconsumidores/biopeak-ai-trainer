@@ -113,7 +113,7 @@ export default {
 				},
 				'.glass-hover': {
 					'&:hover': {
-						background: 'rgba(var(--glass-bg), 0.1)',
+						background: 'rgba(var(--glass-bg), calc(var(--glass-opacity) + 0.05))',
 						transform: 'scale(1.02)',
 						transition: 'all 0.3s ease',
 					}

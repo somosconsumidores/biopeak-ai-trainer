@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, Settings, User, ChartBar } from "lucide-react";
+import ThemeToggle from "@/components/ui/theme-toggle";
 
 interface BioPeakLandingProps {
   onEnterApp: () => void;
@@ -28,6 +29,7 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
           <div className="hidden md:flex items-center space-x-6">
             <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Recursos</a>
             <a href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">Como Funciona</a>
+            <ThemeToggle />
             <Button variant="glass" size="sm">Entrar</Button>
             <Button variant="hero" size="sm">Começar Grátis</Button>
           </div>

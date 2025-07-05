@@ -10,9 +10,56 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
+    /* BioPeak Light Mode Theme */
+    --background: 0 0% 98%;     /* Light background */
+    --foreground: 242 71% 8%;   /* Dark text for contrast */
+
+    --card: 0 0% 100%;
+    --card-foreground: 242 71% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 242 71% 8%;
+
+    --primary: 271 76% 53%;     /* Keep vibrant purple */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 271 76% 95%;   /* Light purple for secondary */
+    --secondary-foreground: 271 76% 20%;
+
+    --muted: 0 0% 95%;          /* Light muted background */
+    --muted-foreground: 0 0% 35%; /* Dark muted text */
+
+    --accent: 271 76% 95%;      /* Light accent */
+    --accent-foreground: 271 76% 20%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 271 30% 85%;      /* Light border */
+    --input: 0 0% 95%;
+    --ring: 271 76% 53%;
+
+    --radius: 1rem;
+
+    /* Light Mode Glassmorphism */
+    --glass-bg: 255 255 255;
+    --glass-opacity: 0.8;
+    --glass-border: 271 76% 53%;
+    --glass-border-opacity: 0.15;
+    
+    /* Light Mode Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(271 76% 53%), hsl(271 76% 65%));
+    --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
+    
+    /* Light Mode Glow Effects */
+    --glow-primary: 0 0 20px hsl(271 76% 53% / 0.2);
+    --glow-intense: 0 0 40px hsl(271 76% 53% / 0.3);
+  }
+
+  .dark {
     /* BioPeak Dark Mode Theme */
-    --background: 242 71% 8%;  /* #0D0628 - Deep blue-purple background */
-    --foreground: 0 0% 100%;   /* Pure white text */
+    --background: 242 71% 8%;   /* Deep blue-purple background */
+    --foreground: 0 0% 100%;    /* Pure white text */
 
     --card: 242 71% 8%;
     --card-foreground: 0 0% 100%;
@@ -20,16 +67,16 @@ All colors MUST be HSL.
     --popover: 242 71% 8%;
     --popover-foreground: 0 0% 100%;
 
-    --primary: 271 76% 53%;    /* #8A2BE2 - Vibrant purple */
+    --primary: 271 76% 53%;     /* Vibrant purple */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 271 76% 53%;  /* Secondary uses same purple with transparency */
+    --secondary: 271 76% 53%;   /* Secondary uses same purple with transparency */
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 242 71% 15%;      /* Slightly lighter background for muted elements */
-    --muted-foreground: 0 0% 88%; /* #E0E0E0 - Light gray text */
+    --muted: 242 71% 15%;       /* Slightly lighter background for muted elements */
+    --muted-foreground: 0 0% 88%; /* Light gray text */
 
-    --accent: 271 76% 53%;     /* Accent color matches primary */
+    --accent: 271 76% 53%;      /* Accent color matches primary */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -39,19 +86,19 @@ All colors MUST be HSL.
     --input: 242 71% 15%;
     --ring: 271 76% 53%;
 
-    --radius: 1rem;  /* Increased border radius for modern look */
+    --radius: 1rem;
 
-    /* Glassmorphism Variables */
+    /* Dark Mode Glassmorphism */
     --glass-bg: 255 255 255;
     --glass-opacity: 0.05;
     --glass-border: 255 255 255;
     --glass-border-opacity: 0.1;
     
-    /* Gradient Variables */
+    /* Dark Mode Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(271 76% 53%), hsl(271 76% 65%));
     --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
     
-    /* Glow Effects */
+    /* Dark Mode Glow Effects */
     --glow-primary: 0 0 20px hsl(271 76% 53% / 0.3);
     --glow-intense: 0 0 40px hsl(271 76% 53% / 0.5);
   }
