@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import BioPeakLanding from "@/components/BioPeakLanding";
 import AppNavigation from "@/components/AppNavigation";
+import MobileNavigation from "@/components/MobileNavigation";
+import MobileHeader from "@/components/MobileHeader";
 import Dashboard from "@/components/Dashboard";
 import TrainingSession from "@/components/TrainingSession";
 import TrainingComparison from "@/components/TrainingComparison";
@@ -62,11 +64,22 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <AppNavigation activeView={currentView} onViewChange={setCurrentView} />
-      <main className="flex-1 overflow-auto">
-        {renderCurrentView()}
-      </main>
+    <div className="min-h-screen bg-background">
+      {/* Mobile Header - only visible on mobile */}
+      <MobileHeader />
+      
+      <div className="flex min-h-screen">
+        {/* Desktop Sidebar - hidden on mobile */}
+        <AppNavigation activeView={currentView} onViewChange={setCurrentView} />
+        
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto pt-14 md:pt-0 pb-20 md:pb-0">
+          {renderCurrentView()}
+        </main>
+      </div>
+      
+      {/* Mobile Bottom Navigation */}
+      <MobileNavigation activeView={currentView} onViewChange={setCurrentView} />
     </div>
   );
 };

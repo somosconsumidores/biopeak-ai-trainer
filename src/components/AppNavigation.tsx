@@ -40,7 +40,7 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
   ];
 
   return (
-    <nav className={`glass h-screen transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'} p-4 border-r border-primary/20`}>
+    <nav className={`glass h-screen transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'} p-4 border-r border-primary/20 hidden md:block`}>
       {/* Logo */}
       <div className="flex items-center mb-8 px-2">
         <img src="/lovable-uploads/6dd7da64-0e29-4226-8bb4-99185306e197.png" alt="BioPeak" className="h-8 w-auto" />

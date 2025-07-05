@@ -75,8 +75,8 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-secondary/30 flex items-center justify-center p-4">
-      <div className="w-full max-w-md relative">
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-secondary/30 flex items-center justify-center p-3 sm:p-4">
+      <div className="w-full max-w-sm sm:max-w-md relative">
         <Card className="glass border-2 border-border/60 shadow-2xl backdrop-blur-xl bg-card/95">
           {/* Close button */}
           <Button
