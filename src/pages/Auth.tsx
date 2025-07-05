@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
+import { useTheme } from 'next-themes';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -19,6 +20,7 @@ const Auth = () => {
   const { signIn, signUp, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { theme } = useTheme();
 
   // Redirect authenticated users to main page
   useEffect(() => {
@@ -91,7 +93,7 @@ const Auth = () => {
             <div className="flex justify-center mb-6">
               <div className="relative">
                 <img 
-                  src="/lovable-uploads/6dd7da64-0e29-4226-8bb4-99185306e197.png" 
+                  src={theme === 'dark' ? "/lovable-uploads/75b2021e-81b9-4f5c-833e-adfc1e81f664.png" : "/lovable-uploads/6dd7da64-0e29-4226-8bb4-99185306e197.png"}
                   alt="BioPeak" 
                   className="h-14 w-auto drop-shadow-lg"
                 />
