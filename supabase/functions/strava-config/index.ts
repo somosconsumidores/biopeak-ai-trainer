@@ -17,17 +17,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     )
 
-    const authHeader = req.headers.get('Authorization')!
-    const token = authHeader.replace('Bearer ', '')
-    
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
     const clientId = Deno.env.get('STRAVA_CLIENT_ID')
     
     console.log('STRAVA_CLIENT_ID configured:', !!clientId)
@@ -43,8 +32,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-
-    console.log('Returning Strava client ID for user:', user.id)
 
     console.log('Request headers - Origin:', req.headers.get('origin'))
     console.log('Request headers - Referer:', req.headers.get('referer'))
