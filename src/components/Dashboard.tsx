@@ -1,9 +1,13 @@
+
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Activity, ChartBar, Bell, Settings } from "lucide-react";
+import { Activity, ChartBar, Bell, Settings, ExternalLink } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -17,6 +21,14 @@ const Dashboard = () => {
             <Bell className="w-4 h-4 mr-2" />
             3 novos insights
           </Badge>
+          <Button 
+            variant="glass" 
+            size="sm"
+            onClick={() => navigate('/strava')}
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Strava
+          </Button>
           <Button variant="ai" size="sm">
             <Settings className="w-4 h-4 mr-2" />
             Configurar
