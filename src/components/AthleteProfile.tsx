@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { User, Settings, Activity, ChartBar } from "lucide-react";
+import EditProfileForm from "./EditProfileForm";
 
 const AthleteProfile = () => {
+  const [showEditForm, setShowEditForm] = useState(false);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -13,7 +17,11 @@ const AthleteProfile = () => {
           <p className="text-muted-foreground">Dados históricos e configuração de metas</p>
         </div>
         <div className="flex items-center space-x-3">
-          <Button variant="glass" size="sm">
+          <Button 
+            variant="glass" 
+            size="sm"
+            onClick={() => setShowEditForm(true)}
+          >
             <Settings className="w-4 h-4 mr-2" />
             Editar Perfil
           </Button>
@@ -280,6 +288,11 @@ const AthleteProfile = () => {
           </div>
         </div>
       </Card>
+
+      {/* Edit Profile Form Modal */}
+      {showEditForm && (
+        <EditProfileForm onClose={() => setShowEditForm(false)} />
+      )}
     </div>
   );
 };
