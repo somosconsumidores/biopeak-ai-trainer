@@ -3,7 +3,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, Settings, User, ChartBar } from "lucide-react";
 
-const BioPeakLanding = () => {
+interface BioPeakLandingProps {
+  onEnterApp: () => void;
+}
+
+const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Particle Background Effect */}
@@ -43,11 +47,11 @@ const BioPeakLanding = () => {
             BioPeak usa inteligência artificial para analisar seus dados de treino Garmin e entregar insights que realmente fazem você evoluir. Porque treino é físico, mas evolução é nos dados.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-            <Button variant="hero" size="lg" className="min-w-48">
+            <Button variant="hero" size="lg" className="min-w-48" onClick={onEnterApp}>
               <Activity className="w-5 h-5 mr-2" />
               Começar Agora
             </Button>
-            <Button variant="glass" size="lg" className="min-w-48">
+            <Button variant="glass" size="lg" onClick={onEnterApp}>
               Ver Demo
             </Button>
           </div>
@@ -150,11 +154,11 @@ const BioPeakLanding = () => {
             Conecte seu Garmin e descubra insights que você nunca imaginou sobre seus treinos
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="hero" size="lg" className="min-w-48">
+            <Button variant="hero" size="lg" className="min-w-48" onClick={onEnterApp}>
               <Activity className="w-5 h-5 mr-2" />
               Conectar Garmin
             </Button>
-            <Button variant="glass" size="lg">
+            <Button variant="glass" size="lg" onClick={onEnterApp}>
               Saber Mais
             </Button>
           </div>

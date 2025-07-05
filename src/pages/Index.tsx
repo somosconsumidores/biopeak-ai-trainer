@@ -11,7 +11,7 @@ const Index = () => {
   const [currentView, setCurrentView] = useState('landing');
 
   if (currentView === 'landing') {
-    return <BioPeakLanding />;
+    return <BioPeakLanding onEnterApp={() => setCurrentView('dashboard')} />;
   }
 
   const renderCurrentView = () => {
