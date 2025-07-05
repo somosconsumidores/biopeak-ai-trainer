@@ -18,6 +18,10 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        // BioPeak custom variants
+        glass: "glass glass-hover text-foreground",
+        hero: "gradient-primary text-primary-foreground glow hover:glow-intense hover:scale-105 transition-all duration-300",
+        ai: "glass glass-hover text-foreground border-primary/50 hover:border-primary",
       },
       size: {
         default: "h-10 px-4 py-2",
