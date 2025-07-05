@@ -28,9 +28,17 @@ const StravaIntegration = () => {
   const loadStravaConfig = async () => {
     try {
       console.log('Loading Strava config...');
-      const { data, error } = await supabase.functions.invoke('strava-config');
       
-      console.log('Strava config response:', { data, error });
+      // Force a fresh request by adding a timestamp
+      const timestamp = Date.now();
+      const { data, error } = await supabase.functions.invoke('strava-config', {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'X-Request-ID': timestamp.toString()
+        }
+      });
+      
+      console.log('Strava config response:', { data, error, timestamp });
       
       if (error) {
         console.error('Error loading Strava config:', error);
