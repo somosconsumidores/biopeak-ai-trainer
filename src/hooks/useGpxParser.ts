@@ -1,5 +1,43 @@
 import { useState } from 'react';
-import { gpxParser } from 'gpx-parser-builder';
+
+// Custom GPX parser using DOMParser
+const parseGpxString = (gpxString: string) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(gpxString, 'text/xml');
+  
+  // Check for parsing errors
+  const parserError = doc.querySelector('parsererror');
+  if (parserError) {
+    throw new Error('Erro ao analisar arquivo GPX: formato inválido');
+  }
+
+  const tracks = Array.from(doc.querySelectorAll('trk')).map(track => {
+    const name = track.querySelector('name')?.textContent || 'Trilha sem nome';
+    const segments = Array.from(track.querySelectorAll('trkseg'));
+    
+    const points = segments.flatMap(segment => 
+      Array.from(segment.querySelectorAll('trkpt')).map(point => {
+        const lat = parseFloat(point.getAttribute('lat') || '0');
+        const lon = parseFloat(point.getAttribute('lon') || '0');
+        const timeElement = point.querySelector('time');
+        const elevationElement = point.querySelector('ele');
+        const heartRateElement = point.querySelector('extensions heartrate, extensions hr');
+        
+        return {
+          lat,
+          lon,
+          time: timeElement ? timeElement.textContent : null,
+          elevation: elevationElement ? parseFloat(elevationElement.textContent || '0') : undefined,
+          heartRate: heartRateElement ? parseInt(heartRateElement.textContent || '0') : undefined
+        };
+      })
+    );
+
+    return { name, points };
+  });
+
+  return { tracks };
+};
 
 export interface GpxData {
   name: string;
@@ -32,15 +70,14 @@ export const useGpxParser = () => {
 
     try {
       const text = await file.text();
-      const parsed = gpxParser.parse(text);
+      const parsed = parseGpxString(text);
       
       if (!parsed.tracks || parsed.tracks.length === 0) {
         throw new Error('Nenhuma trilha encontrada no arquivo GPX');
       }
 
       const track = parsed.tracks[0];
-      const segment = track.segments[0];
-      const points = segment.points;
+      const points = track.points;
 
       if (!points || points.length === 0) {
         throw new Error('Nenhum ponto de trilha encontrado');
@@ -57,7 +94,7 @@ export const useGpxParser = () => {
 
       const trackPoints = points.map((point, index) => {
         const elevation = point.elevation || 0;
-        const heartRate = point.extensions?.TrackPointExtension?.hr;
+        const heartRate = point.heartRate;
         
         if (elevation > maxElevation) maxElevation = elevation;
         if (elevation < minElevation) minElevation = elevation;
@@ -72,23 +109,23 @@ export const useGpxParser = () => {
         if (index > 0) {
           const prevPoint = points[index - 1];
           const distance = calculateDistance(
-            prevPoint.latitude,
-            prevPoint.longitude,
-            point.latitude,
-            point.longitude
+            prevPoint.lat,
+            prevPoint.lon,
+            point.lat,
+            point.lon
           );
           totalDistance += distance;
         }
 
         // Calculate elevation gain
-        if (index > 0 && elevation > points[index - 1].elevation) {
-          elevationGain += elevation - points[index - 1].elevation;
+        if (index > 0 && elevation > (points[index - 1].elevation || 0)) {
+          elevationGain += elevation - (points[index - 1].elevation || 0);
         }
 
         return {
-          lat: point.latitude,
-          lon: point.longitude,
-          time: new Date(point.time),
+          lat: point.lat,
+          lon: point.lon,
+          time: point.time ? new Date(point.time) : new Date(),
           elevation,
           heartRate,
           pace: 0 // Will be calculated based on segment times
@@ -96,12 +133,18 @@ export const useGpxParser = () => {
       });
 
       // Calculate total time and average pace
-      const startTime = new Date(points[0].time);
-      const endTime = new Date(points[points.length - 1].time);
-      const totalTimeMs = endTime.getTime() - startTime.getTime();
+      const validTimePoints = trackPoints.filter(p => p.time);
+      let totalTimeMs = 0;
+      
+      if (validTimePoints.length >= 2) {
+        const startTime = validTimePoints[0].time;
+        const endTime = validTimePoints[validTimePoints.length - 1].time;
+        totalTimeMs = endTime.getTime() - startTime.getTime();
+      }
+      
       const totalTimeMinutes = totalTimeMs / (1000 * 60);
       
-      const averagePaceMinPerKm = totalTimeMinutes / (totalDistance / 1000);
+      const averagePaceMinPerKm = totalDistance > 0 ? totalTimeMinutes / (totalDistance / 1000) : 0;
       const paceMin = Math.floor(averagePaceMinPerKm);
       const paceSec = Math.round((averagePaceMinPerKm - paceMin) * 60);
 
@@ -111,8 +154,8 @@ export const useGpxParser = () => {
         totalTime: Math.round(totalTimeMs / 1000),
         averagePace: `${paceMin}:${paceSec.toString().padStart(2, '0')}`,
         elevationGain: Math.round(elevationGain),
-        maxElevation: Math.round(maxElevation),
-        minElevation: Math.round(minElevation),
+        maxElevation: maxElevation !== -Infinity ? Math.round(maxElevation) : 0,
+        minElevation: minElevation !== Infinity ? Math.round(minElevation) : 0,
         averageHeartRate: heartRateCount > 0 ? Math.round(heartRateSum / heartRateCount) : undefined,
         maxHeartRate: maxHeartRate > 0 ? maxHeartRate : undefined,
         calories: estimateCalories(totalDistance, totalTimeMs, heartRateSum / heartRateCount),
