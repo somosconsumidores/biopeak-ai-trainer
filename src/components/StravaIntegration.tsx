@@ -18,8 +18,8 @@ const StravaIntegration = () => {
   const [stravaConfig, setStravaConfig] = useState<{clientId: string, redirectUri: string} | null>(null);
 
   useEffect(() => {
+    loadStravaConfig();
     if (user) {
-      loadStravaConfig();
       checkStravaConnection();
       loadActivities();
     }
@@ -56,6 +56,9 @@ const StravaIntegration = () => {
     } catch (error) {
       console.error('Error loading Strava config:', error);
       toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro de rede'}`);
+    } finally {
+      // Always stop loading after config attempt
+      setLoading(false);
     }
   };
 

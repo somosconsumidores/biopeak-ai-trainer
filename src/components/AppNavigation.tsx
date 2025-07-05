@@ -3,6 +3,7 @@ import { Activity, LayoutDashboard, ChartBar, Settings, User, LogOut } from "luc
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/ui/theme-toggle";
 
 interface AppNavigationProps {
@@ -14,6 +15,7 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { signOut, user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     try {
@@ -83,6 +85,21 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
       {!isCollapsed && (
         <div className="mb-4">
           <ThemeToggle />
+        </div>
+      )}
+
+      {/* Strava Integration Button */}
+      {!isCollapsed && (
+        <div className="mb-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground hover:text-foreground hover:text-orange-500"
+            onClick={() => navigate('/strava')}
+          >
+            <Activity className="w-4 h-4 mr-2" />
+            Integração Strava
+          </Button>
         </div>
       )}
 
