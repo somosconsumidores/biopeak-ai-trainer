@@ -51,6 +51,96 @@ export type Database = {
         }
         Relationships: []
       }
+      strava_activities: {
+        Row: {
+          average_heartrate: number | null
+          average_speed: number | null
+          calories: number | null
+          created_at: string
+          distance: number | null
+          elapsed_time: number | null
+          id: string
+          max_heartrate: number | null
+          max_speed: number | null
+          moving_time: number | null
+          name: string
+          start_date: string
+          strava_activity_id: number
+          total_elevation_gain: number | null
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_heartrate?: number | null
+          average_speed?: number | null
+          calories?: number | null
+          created_at?: string
+          distance?: number | null
+          elapsed_time?: number | null
+          id?: string
+          max_heartrate?: number | null
+          max_speed?: number | null
+          moving_time?: number | null
+          name: string
+          start_date: string
+          strava_activity_id: number
+          total_elevation_gain?: number | null
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_heartrate?: number | null
+          average_speed?: number | null
+          calories?: number | null
+          created_at?: string
+          distance?: number | null
+          elapsed_time?: number | null
+          id?: string
+          max_heartrate?: number | null
+          max_speed?: number | null
+          moving_time?: number | null
+          name?: string
+          start_date?: string
+          strava_activity_id?: number
+          total_elevation_gain?: number | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      strava_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string
+          id: string
+          refresh_token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          refresh_token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          refresh_token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
