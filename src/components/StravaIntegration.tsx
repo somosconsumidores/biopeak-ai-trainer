@@ -27,23 +27,27 @@ const StravaIntegration = () => {
 
   const loadStravaConfig = async () => {
     try {
+      console.log('Loading Strava config...');
       const { data, error } = await supabase.functions.invoke('strava-config');
+      
+      console.log('Strava config response:', { data, error });
       
       if (error) {
         console.error('Error loading Strava config:', error);
-        toast.error('Erro ao carregar configuração do Strava');
+        toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro desconhecido'}`);
         return;
       }
 
       if (data?.clientId) {
+        console.log('Strava config loaded successfully:', { clientId: data.clientId, redirectUri: data.redirectUri });
         setStravaConfig(data);
       } else {
-        console.error('No client ID received from config');
-        toast.error('Configuração do Strava não encontrada');
+        console.error('No client ID received from config:', data);
+        toast.error(`Configuração do Strava inválida: ${JSON.stringify(data)}`);
       }
     } catch (error) {
       console.error('Error loading Strava config:', error);
-      toast.error('Erro ao carregar configuração do Strava');
+      toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro de rede'}`);
     }
   };
 

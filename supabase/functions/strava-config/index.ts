@@ -46,9 +46,14 @@ Deno.serve(async (req) => {
 
     console.log('Returning Strava client ID for user:', user.id)
 
+    // Get the origin from the request headers to use the correct domain
+    const origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/') || 'https://f57b9513-c7c3-4577-8f1c-9c357d60d4b2.lovableproject.com'
+    
+    console.log('Using redirect URI origin:', origin)
+
     return new Response(JSON.stringify({ 
       clientId: clientId,
-      redirectUri: `https://f57b9513-c7c3-4577-8f1c-9c357d60d4b2.lovableproject.com/`
+      redirectUri: `${origin}/`
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
