@@ -27,6 +27,7 @@ export const useStravaIntegration = () => {
       
       const timestamp = Date.now();
       const { data, error } = await supabase.functions.invoke('strava-config', {
+        method: 'GET',
         headers: {
           'Cache-Control': 'no-cache',
           'X-Request-ID': timestamp.toString()

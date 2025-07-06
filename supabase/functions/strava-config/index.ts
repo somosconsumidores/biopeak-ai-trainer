@@ -16,6 +16,15 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Accept both GET and POST requests
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    console.log(`[strava-config] Method ${req.method} not allowed`)
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
