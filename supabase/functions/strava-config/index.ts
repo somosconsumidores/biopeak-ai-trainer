@@ -37,20 +37,44 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Simplified redirect URI logic
+    // Smart redirect URI logic with environment detection
     const origin = req.headers.get('origin') || req.headers.get('referer')
-    let redirectUri = '/'
+    const host = req.headers.get('host')
+    const forwardedHost = req.headers.get('x-forwarded-host')
     
-    if (origin) {
+    console.log('[strava-config] Request headers:', {
+      origin,
+      host,
+      forwardedHost,
+      userAgent: req.headers.get('user-agent')
+    })
+    
+    let redirectUri = 'https://biopeak-ai.com/' // Default to production
+    
+    // Environment detection logic
+    if (forwardedHost && forwardedHost.includes('biopeak-ai.com')) {
+      redirectUri = 'https://biopeak-ai.com/'
+      console.log('[strava-config] Detected production environment via forwarded host')
+    } else if (host && host.includes('biopeak-ai.com')) {
+      redirectUri = 'https://biopeak-ai.com/'
+      console.log('[strava-config] Detected production environment via host')
+    } else if (origin && origin.includes('biopeak-ai.com')) {
+      redirectUri = 'https://biopeak-ai.com/'
+      console.log('[strava-config] Detected production environment via origin')
+    } else if (origin) {
+      // For local development or other environments
       try {
         const url = new URL(origin)
-        redirectUri = `${url.origin}/`
+        if (url.hostname === 'localhost' || url.hostname.includes('127.0.0.1') || url.hostname.includes('lovable.app')) {
+          redirectUri = `${url.origin}/`
+          console.log('[strava-config] Using development/preview environment:', redirectUri)
+        }
       } catch (e) {
-        console.warn('[strava-config] Failed to parse origin, using root:', e)
+        console.warn('[strava-config] Failed to parse origin, using production fallback:', e)
       }
     }
     
-    console.log('[strava-config] Using redirect URI:', redirectUri)
+    console.log('[strava-config] Final redirect URI:', redirectUri)
 
     const response = {
       clientId: clientId,
