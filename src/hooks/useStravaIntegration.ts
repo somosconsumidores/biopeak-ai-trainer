@@ -23,22 +23,28 @@ export const useStravaIntegration = () => {
 
   const loadStravaConfig = async () => {
     try {
-      console.log('[useStravaIntegration] Using direct Strava config...');
+      console.log('[useStravaIntegration] Loading Strava config from edge function...');
       
-      // Use direct configuration instead of edge function
-      // Use the current window location to ensure consistency
-      const currentOrigin = window.location.origin;
-      console.log('[useStravaIntegration] Current origin:', currentOrigin);
+      const { data, error } = await supabase.functions.invoke('strava-config');
       
-      const config = {
-        clientId: '140885', // Test client ID - replace with your real one
-        redirectUri: currentOrigin + '/'
-      };
+      if (error) {
+        console.error('[useStravaIntegration] Error loading config:', error);
+        toast.error('Erro ao carregar configuração do Strava.');
+        return;
+      }
       
-      console.log('[useStravaIntegration] Strava config loaded:', config);
-      setStravaConfig(config);
+      if (data?.clientId) {
+        console.log('[useStravaIntegration] Config loaded successfully');
+        setStravaConfig({
+          clientId: data.clientId,
+          redirectUri: data.redirectUri || window.location.origin + '/'
+        });
+      } else {
+        console.error('[useStravaIntegration] No client ID received');
+        toast.error('Configuração do Strava incompleta.');
+      }
     } catch (error) {
-      console.error('[useStravaIntegration] Error setting up Strava config:', error);
+      console.error('[useStravaIntegration] Exception loading config:', error);
       toast.error('Erro na configuração do Strava.');
     } finally {
       setLoading(false);
