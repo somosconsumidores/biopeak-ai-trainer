@@ -11,7 +11,7 @@ export const useStravaIntegration = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stravaConfig, setStravaConfig] = useState<{clientId: string, redirectUri: string} | null>(null);
+  const [stravaConfig, setStravaConfig] = useState<{clientId: string, redirectUri: string, fallback?: boolean} | null>(null);
 
   useEffect(() => {
     loadStravaConfig();
@@ -39,30 +39,50 @@ export const useStravaIntegration = () => {
       if (error) {
         console.error('[useStravaIntegration] Error loading Strava config:', error);
         
-        // Check if it's a network connectivity issue
-        if (error.message?.includes('Failed to fetch') || error.message?.includes('Failed to send a request')) {
-          console.warn('[useStravaIntegration] Network connectivity issue detected');
-          toast.error(`Não foi possível conectar com o servidor. Verifique sua conexão com a internet.`);
-        } else {
-          toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro desconhecido'}`);
-        }
+        // Use fallback configuration when edge function fails
+        console.log('[useStravaIntegration] Using fallback configuration');
+        const fallbackConfig = {
+          clientId: '140885', // Strava Test Client ID - replace with real one
+          redirectUri: window.location.origin + '/',
+          fallback: true
+        };
+        
+        setStravaConfig(fallbackConfig);
+        toast.error('Usando configuração de fallback. Algumas funcionalidades podem estar limitadas.');
         return;
       }
 
       if (data?.clientId) {
         console.log('[useStravaIntegration] Strava config loaded successfully:', { 
           clientId: data.clientId, 
-          redirectUri: data.redirectUri,
-          debug: data.debug 
+          redirectUri: data.redirectUri
         });
         setStravaConfig(data);
       } else {
         console.error('[useStravaIntegration] No client ID received from config:', data);
-        toast.error(`Configuração do Strava inválida: ${JSON.stringify(data)}`);
+        
+        // Use fallback configuration
+        const fallbackConfig = {
+          clientId: '140885', // Strava Test Client ID - replace with real one
+          redirectUri: window.location.origin + '/',
+          fallback: true
+        };
+        
+        setStravaConfig(fallbackConfig);
+        toast.error('Configuração incompleta. Usando fallback.');
       }
     } catch (error) {
       console.error('[useStravaIntegration] Exception loading Strava config:', error);
-      toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro de rede'}`);
+      
+      // Use fallback configuration on any exception
+      const fallbackConfig = {
+        clientId: '140885', // Strava Test Client ID - replace with real one
+        redirectUri: window.location.origin + '/',
+        fallback: true
+      };
+      
+      setStravaConfig(fallbackConfig);
+      toast.error('Erro na configuração. Usando modo fallback.');
     } finally {
       setLoading(false);
     }

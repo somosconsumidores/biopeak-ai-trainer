@@ -7,7 +7,7 @@ interface StravaConnectionStatusProps {
   isConnected: boolean;
   isConnecting: boolean;
   isSyncing: boolean;
-  stravaConfig: {clientId: string, redirectUri: string} | null;
+  stravaConfig: {clientId: string, redirectUri: string, fallback?: boolean} | null;
   onConnect: () => void;
   onSync: () => void;
 }
@@ -67,7 +67,13 @@ const StravaConnectionStatus = ({
         
         {!stravaConfig && (
           <p className="text-sm text-muted-foreground">
-            Verifique sua conexão com a internet e tente recarregar a página.
+            Carregando configuração...
+          </p>
+        )}
+        
+        {stravaConfig?.fallback && (
+          <p className="text-sm text-yellow-400">
+            ⚠️ Modo fallback ativo - funcionalidade limitada
           </p>
         )}
       </div>
