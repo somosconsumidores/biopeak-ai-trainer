@@ -23,7 +23,7 @@ export const useStravaIntegration = () => {
 
   const loadStravaConfig = async () => {
     try {
-      console.log('Loading Strava config...');
+      console.log('[useStravaIntegration] Loading Strava config...');
       
       const timestamp = Date.now();
       const { data, error } = await supabase.functions.invoke('strava-config', {
@@ -33,23 +33,34 @@ export const useStravaIntegration = () => {
         }
       });
       
-      console.log('Strava config response:', { data, error, timestamp });
+      console.log('[useStravaIntegration] Strava config response:', { data, error, timestamp });
       
       if (error) {
-        console.error('Error loading Strava config:', error);
-        toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro desconhecido'}`);
+        console.error('[useStravaIntegration] Error loading Strava config:', error);
+        
+        // Check if it's a network connectivity issue
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('Failed to send a request')) {
+          console.warn('[useStravaIntegration] Network connectivity issue detected');
+          toast.error(`Não foi possível conectar com o servidor. Verifique sua conexão com a internet.`);
+        } else {
+          toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro desconhecido'}`);
+        }
         return;
       }
 
       if (data?.clientId) {
-        console.log('Strava config loaded successfully:', { clientId: data.clientId, redirectUri: data.redirectUri });
+        console.log('[useStravaIntegration] Strava config loaded successfully:', { 
+          clientId: data.clientId, 
+          redirectUri: data.redirectUri,
+          debug: data.debug 
+        });
         setStravaConfig(data);
       } else {
-        console.error('No client ID received from config:', data);
+        console.error('[useStravaIntegration] No client ID received from config:', data);
         toast.error(`Configuração do Strava inválida: ${JSON.stringify(data)}`);
       }
     } catch (error) {
-      console.error('Error loading Strava config:', error);
+      console.error('[useStravaIntegration] Exception loading Strava config:', error);
       toast.error(`Erro ao carregar configuração do Strava: ${error.message || 'Erro de rede'}`);
     } finally {
       setLoading(false);

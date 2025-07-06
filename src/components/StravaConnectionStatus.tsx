@@ -52,7 +52,7 @@ const StravaConnectionStatus = ({
             className="bg-orange-500 hover:bg-orange-600 text-white"
           >
             <ExternalLink className="w-4 h-4 mr-2" />
-            {isConnecting ? 'Conectando...' : !stravaConfig ? 'Carregando...' : 'Conectar ao Strava'}
+            {isConnecting ? 'Conectando...' : !stravaConfig ? 'Configuração indisponível' : 'Conectar ao Strava'}
           </Button>
         ) : (
           <Button 
@@ -63,6 +63,12 @@ const StravaConnectionStatus = ({
             <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing ? 'Sincronizando...' : 'Sincronizar Atividades'}
           </Button>
+        )}
+        
+        {!stravaConfig && (
+          <p className="text-sm text-muted-foreground">
+            Verifique sua conexão com a internet e tente recarregar a página.
+          </p>
         )}
       </div>
     </Card>

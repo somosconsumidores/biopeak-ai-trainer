@@ -6,8 +6,13 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req) => {
+  console.log(`[strava-config] ${req.method} request received from:`, req.headers.get('origin'))
+  console.log(`[strava-config] Request URL:`, req.url)
+  console.log(`[strava-config] User-Agent:`, req.headers.get('user-agent'))
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('[strava-config] Handling OPTIONS request')
     return new Response(null, { headers: corsHeaders })
   }
 
@@ -19,11 +24,16 @@ Deno.serve(async (req) => {
 
     const clientId = Deno.env.get('STRAVA_CLIENT_ID')
     
-    console.log('STRAVA_CLIENT_ID configured:', !!clientId)
-    console.log('Client ID value (first 10 chars):', clientId ? clientId.substring(0, 10) + '...' : 'MISSING')
+    console.log('[strava-config] STRAVA_CLIENT_ID configured:', !!clientId)
+    if (clientId) {
+      console.log('[strava-config] Client ID length:', clientId.length)
+      console.log('[strava-config] Client ID preview:', clientId.substring(0, 8) + '...')
+    } else {
+      console.error('[strava-config] STRAVA_CLIENT_ID is missing!')
+    }
     
     if (!clientId) {
-      console.error('STRAVA_CLIENT_ID not configured')
+      console.error('[strava-config] STRAVA_CLIENT_ID not configured')
       return new Response(JSON.stringify({ 
         error: 'Strava configuration missing',
         details: 'STRAVA_CLIENT_ID não configurado nos secrets do Supabase'
@@ -33,40 +43,69 @@ Deno.serve(async (req) => {
       })
     }
 
-    console.log('Request headers - Origin:', req.headers.get('origin'))
-    console.log('Request headers - Referer:', req.headers.get('referer'))
-    console.log('Request headers - Host:', req.headers.get('host'))
-    console.log('Request URL:', req.url)
+    // Get origin from request
+    const origin = req.headers.get('origin')
+    const referer = req.headers.get('referer')
+    const host = req.headers.get('host')
     
-    // Get the origin from the request headers to use the correct domain
-    let origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+    console.log('[strava-config] Origin:', origin)
+    console.log('[strava-config] Referer:', referer)
+    console.log('[strava-config] Host:', host)
     
-    console.log('Initial origin detected:', origin)
+    // Determine the correct redirect URI
+    let redirectOrigin = origin
     
-    // Use the appropriate domain based on the request
-    if (!origin || origin.includes('lovableproject.com') || origin.includes('biopeak-ai.com')) {
-      if (origin && origin.includes('lovable')) {
-        // Keep lovable preview domain
-        console.log('Using preview domain:', origin)
-      } else {
-        // Use production domain
-        origin = 'https://biopeak-ai.com'
-        console.log('Using production domain: biopeak-ai.com')
+    if (!redirectOrigin && referer) {
+      // Extract origin from referer
+      try {
+        const refererUrl = new URL(referer)
+        redirectOrigin = refererUrl.origin
+      } catch (e) {
+        console.warn('[strava-config] Failed to parse referer URL:', e)
       }
     }
     
-    console.log('Final redirect URI origin:', origin)
+    // Default fallback logic
+    if (!redirectOrigin) {
+      // Check if this is a preview domain based on the request URL
+      const requestUrl = new URL(req.url)
+      if (requestUrl.hostname.includes('lovableproject.com')) {
+        redirectOrigin = `https://${requestUrl.hostname}`
+        console.log('[strava-config] Using preview domain from request URL:', redirectOrigin)
+      } else {
+        // Production fallback
+        redirectOrigin = 'https://biopeak-ai.com'
+        console.log('[strava-config] Using production fallback:', redirectOrigin)
+      }
+    }
+    
+    const redirectUri = `${redirectOrigin}/`
+    console.log('[strava-config] Final redirect URI:', redirectUri)
 
-    return new Response(JSON.stringify({ 
+    const response = {
       clientId: clientId,
-      redirectUri: `${origin}/`
-    }), {
+      redirectUri: redirectUri,
+      debug: {
+        origin,
+        referer,
+        host,
+        timestamp: new Date().toISOString()
+      }
+    }
+
+    console.log('[strava-config] Sending response:', JSON.stringify(response, null, 2))
+
+    return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
   } catch (error) {
-    console.error('Error in strava-config function:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    console.error('[strava-config] Error in function:', error)
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
