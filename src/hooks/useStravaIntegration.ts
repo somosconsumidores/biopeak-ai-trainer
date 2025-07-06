@@ -26,9 +26,13 @@ export const useStravaIntegration = () => {
       console.log('[useStravaIntegration] Using direct Strava config...');
       
       // Use direct configuration instead of edge function
+      // Use the current window location to ensure consistency
+      const currentOrigin = window.location.origin;
+      console.log('[useStravaIntegration] Current origin:', currentOrigin);
+      
       const config = {
         clientId: '140885', // Test client ID - replace with your real one
-        redirectUri: window.location.origin + '/'
+        redirectUri: currentOrigin + '/'
       };
       
       console.log('[useStravaIntegration] Strava config loaded:', config);
