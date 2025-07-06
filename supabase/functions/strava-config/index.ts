@@ -4,7 +4,7 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req) => {
-  console.log(`[strava-config] ${req.method} request received`)
+  console.log(`[strava-config] ${req.method} request received from ${req.headers.get('origin') || 'unknown origin'}`)
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
