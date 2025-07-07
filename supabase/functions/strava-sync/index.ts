@@ -237,13 +237,45 @@ Deno.serve(async (req) => {
     // Helper function to add delay between API calls to respect rate limits
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
     
-    // Fetch detailed data for each activity to get heart rate and calories
-    console.log('[strava-sync] Starting detailed data fetch for activities...')
+    // Optimize detailed data fetch to prevent timeouts
+    console.log('[strava-sync] Starting optimized detailed data fetch...')
     const detailedActivities: StravaActivity[] = []
     let detailRequestCount = 0
     
-    for (let i = 0; i < activities.length; i++) {
-      const activity = activities[i]
+    // Sort activities by date (most recent first) and limit to 50 for detailed processing
+    const sortedActivities = activities.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
+    const maxDetailedActivities = 50
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    
+    // Prioritize recent activities (last 30 days)
+    const recentActivities = sortedActivities.filter(activity => 
+      new Date(activity.start_date) >= thirtyDaysAgo
+    ).slice(0, maxDetailedActivities)
+    
+    // Add older activities up to the limit
+    const olderActivities = sortedActivities.filter(activity => 
+      new Date(activity.start_date) < thirtyDaysAgo
+    ).slice(0, Math.max(0, maxDetailedActivities - recentActivities.length))
+    
+    const activitiesToProcess = [...recentActivities, ...olderActivities].slice(0, maxDetailedActivities)
+    
+    console.log(`[strava-sync] Processing detailed data for ${activitiesToProcess.length} activities (${recentActivities.length} recent, ${olderActivities.length} older)`)
+    
+    // Track execution time to prevent timeouts
+    const startTime = Date.now()
+    const maxExecutionTime = 120000 // 2 minutes max for detailed processing
+    
+    for (let i = 0; i < activitiesToProcess.length; i++) {
+      const activity = activitiesToProcess[i]
+      
+      // Check execution time - stop if approaching timeout
+      if (Date.now() - startTime > maxExecutionTime) {
+        console.log(`[strava-sync] Stopping detailed processing due to time limit after ${i} activities`)
+        // Add remaining activities without detailed data
+        detailedActivities.push(...activitiesToProcess.slice(i))
+        break
+      }
       
       // Check if we already have detailed data (heart rate or calories)
       if (activity.average_heartrate || activity.calories) {
@@ -253,11 +285,11 @@ Deno.serve(async (req) => {
       }
       
       try {
-        console.log(`[strava-sync] Fetching detailed data for activity ${activity.id} (${i + 1}/${activities.length})`)
+        console.log(`[strava-sync] Fetching detailed data for activity ${activity.id} (${i + 1}/${activitiesToProcess.length})`)
         
-        // Add delay to respect rate limits (600 requests per 15 min = ~2.5 seconds between requests)
+        // Reduced delay to 1 second to speed up processing
         if (detailRequestCount > 0) {
-          await delay(3000) // 3 second delay between detailed requests
+          await delay(1000) // 1 second delay between detailed requests
         }
         
         const detailResponse = await fetch(
@@ -289,9 +321,9 @@ Deno.serve(async (req) => {
           detailedActivities.push(activity) // Keep original data
         }
         
-        // Log progress every 10 activities
-        if ((i + 1) % 10 === 0) {
-          console.log(`[strava-sync] Processed ${i + 1}/${activities.length} activities for detailed data`)
+        // Log progress every 5 activities
+        if ((i + 1) % 5 === 0) {
+          console.log(`[strava-sync] Processed ${i + 1}/${activitiesToProcess.length} activities for detailed data`)
         }
         
       } catch (error) {
@@ -299,6 +331,11 @@ Deno.serve(async (req) => {
         detailedActivities.push(activity) // Keep original data
       }
     }
+    
+    // Add any remaining activities that weren't processed for detailed data
+    const processedIds = new Set(detailedActivities.map(a => a.id))
+    const remainingActivities = activities.filter(a => !processedIds.has(a.id))
+    detailedActivities.push(...remainingActivities)
     
     console.log(`[strava-sync] Completed detailed data fetch. Made ${detailRequestCount} detail requests.`)
     let syncedCount = 0
