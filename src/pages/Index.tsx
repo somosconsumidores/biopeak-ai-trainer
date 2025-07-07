@@ -18,16 +18,18 @@ const Index = () => {
 
   // Redirect authenticated users - handle new user flow properly
   useEffect(() => {
+    const currentPath = window.location.pathname;
+    
     if (user && !loading) {
       const isNewUser = localStorage.getItem('is_new_user') === 'true';
       if (isNewUser) {
         localStorage.removeItem('is_new_user');
         navigate('/strava');
-      } else if (currentView !== 'landing') {
-        // Only redirect existing users to main page if not on landing
+      } else if (currentPath === '/' && currentView !== 'landing') {
+        // Only redirect existing users from root path, not from other pages like /strava
         navigate('/');
       }
-    } else if (!loading && !user && currentView !== 'landing') {
+    } else if (!loading && !user && currentPath !== '/auth' && currentView !== 'landing') {
       navigate('/auth');
     }
   }, [user, loading, currentView, navigate]);
