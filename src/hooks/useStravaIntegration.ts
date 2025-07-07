@@ -127,17 +127,34 @@ export const useStravaIntegration = () => {
 
   const handleStravaConnect = () => {
     if (!stravaConfig) {
+      console.error('[useStravaIntegration] No Strava config available');
       toast.error('Configuração do Strava não carregada. Tente novamente.');
       return;
     }
 
+    console.log('[useStravaIntegration] Starting Strava connection with config:', {
+      clientId: stravaConfig.clientId,
+      redirectUri: stravaConfig.redirectUri,
+      fallback: stravaConfig.fallback
+    });
+
     const scope = 'read,activity:read_all';
-    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(stravaConfig.redirectUri)}&approval_prompt=force&scope=${scope}`;
+    const state = Math.random().toString(36).substring(2, 15); // Add state for security
+    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(stravaConfig.redirectUri)}&approval_prompt=force&scope=${scope}&state=${state}`;
     
-    console.log('Redirecting to Strava auth:', authUrl);
+    console.log('[useStravaIntegration] Redirecting to Strava auth URL:', authUrl);
+    console.log('[useStravaIntegration] Setting localStorage strava_connecting = true');
     
+    // Store connection state and timestamp
     localStorage.setItem('strava_connecting', 'true');
-    window.location.href = authUrl;
+    localStorage.setItem('strava_connect_time', Date.now().toString());
+    localStorage.setItem('strava_state', state);
+    
+    // Add a small delay to ensure localStorage is set
+    setTimeout(() => {
+      console.log('[useStravaIntegration] Executing redirect to Strava...');
+      window.location.href = authUrl;
+    }, 100);
   };
 
   const handleStravaCallback = async (code: string) => {
@@ -273,15 +290,37 @@ export const useStravaIntegration = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
+    const error = urlParams.get('error');
+    const errorDescription = urlParams.get('error_description');
     const isConnecting = localStorage.getItem('strava_connecting') === 'true';
     
     console.log('[useStravaIntegration] Checking for OAuth callback:', {
       currentUrl: window.location.href,
       hasCode: !!code,
-      code: code ? 'present' : 'missing',
+      hasError: !!error,
+      error,
+      errorDescription,
       isConnecting,
       localStorage: localStorage.getItem('strava_connecting')
     });
+    
+    if (error && isConnecting) {
+      // User denied authorization or other OAuth error
+      console.error('[useStravaIntegration] OAuth error from Strava:', { error, errorDescription });
+      let errorMessage = 'Autorização negada pelo usuário';
+      
+      if (error === 'access_denied') {
+        errorMessage = 'Você precisa autorizar o acesso ao Strava para continuar';
+      } else if (errorDescription) {
+        errorMessage = errorDescription;
+      }
+      
+      toast.error(`Erro na conexão: ${errorMessage}`);
+      localStorage.removeItem('strava_connecting');
+      setIsConnecting(false);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
     
     if (code && isConnecting) {
       console.log('[useStravaIntegration] Processing Strava OAuth callback...');
@@ -289,8 +328,21 @@ export const useStravaIntegration = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (code && !isConnecting) {
       console.warn('[useStravaIntegration] Code found but not in connecting state');
-    } else if (!code && isConnecting) {
-      console.warn('[useStravaIntegration] In connecting state but no code found');
+      // Clean up the URL anyway
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (!code && isConnecting && window.location.pathname === '/strava') {
+      // User is on /strava page but no code and was connecting - likely denied or error
+      console.warn('[useStravaIntegration] User returned to /strava without code during connection process');
+      
+      // Check if this might be a denied authorization
+      setTimeout(() => {
+        if (localStorage.getItem('strava_connecting') === 'true') {
+          console.log('[useStravaIntegration] Assuming authorization was denied or failed');
+          toast.error('Conexão cancelada. Tente conectar novamente ao Strava.');
+          localStorage.removeItem('strava_connecting');
+          setIsConnecting(false);
+        }
+      }, 2000); // Give some time for potential delayed redirects
     }
   }, []);
 
