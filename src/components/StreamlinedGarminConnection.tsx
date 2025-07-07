@@ -131,40 +131,55 @@ const StreamlinedGarminConnection = () => {
   };
 
   const startStreamlinedConnection = async () => {
+    console.log('🚀 STARTING STREAMLINED GARMIN CONNECTION');
+    console.log('User:', user?.id);
+    console.log('Current URL:', window.location.href);
+    
     setShowModal(true);
     setIsProcessing(true);
     setProgress(0);
 
     try {
       // Step 1: OAuth Authorization
+      console.log('🔐 Starting OAuth authorization step');
       updateStepStatus('oauth', 'active');
       const authResult = await initiateOAuthFlow();
+      console.log('🔐 OAuth result:', authResult);
       
       if (!authResult) {
+        console.log('❌ OAuth authorization failed or cancelled');
         throw new Error('Autorização cancelada pelo usuário');
       }
 
+      console.log('✅ OAuth completed successfully');
       updateStepStatus('oauth', 'completed');
       setProgress(25);
 
       // Step 2: Setup Webhooks
+      console.log('🪝 Starting webhook setup');
       updateStepStatus('webhooks', 'active');
       await setupWebhooksAutomatically();
+      console.log('✅ Webhooks setup completed');
       updateStepStatus('webhooks', 'completed');
       setProgress(50);
 
       // Step 3: Download Historical Activities
+      console.log('📥 Starting historical activities download');
       updateStepStatus('download', 'active');
       await downloadAllHistoricalActivities();
+      console.log('✅ Historical download completed');
       updateStepStatus('download', 'completed');
       setProgress(75);
 
       // Step 4: Finalize
+      console.log('🏁 Finalizing setup');
       updateStepStatus('complete', 'active');
       await finalizeSetup();
+      console.log('✅ Setup finalization completed');
       updateStepStatus('complete', 'completed');
       setProgress(100);
 
+      console.log('🎉 STREAMLINED CONNECTION COMPLETED SUCCESSFULLY');
       setIsConnected(true);
       toast({
         title: "🎉 Garmin Connect configurado!",
@@ -177,7 +192,8 @@ const StreamlinedGarminConnection = () => {
       }, 2000);
 
     } catch (error) {
-      console.error('Connection error:', error);
+      console.error('❌ STREAMLINED CONNECTION ERROR:', error);
+      console.error('Error details:', error.message);
       
       // Mark current active step as error
       const activeStep = connectionSteps.find(step => step.status === 'active');
@@ -196,13 +212,19 @@ const StreamlinedGarminConnection = () => {
   };
 
   const initiateOAuthFlow = async (): Promise<boolean> => {
+    console.log('🔐 Initiating OAuth flow...');
     return new Promise(async (resolve) => {
       try {
+        console.log('📞 Calling garmin-config function...');
         const { data, error } = await supabase.functions.invoke('garmin-config');
+        console.log('📞 Garmin-config response:', { data, error });
         
         if (error || !data?.authUrl) {
+          console.error('❌ No auth URL received:', error);
           throw error || new Error('Não foi possível obter URL de autorização');
         }
+
+        console.log('🌐 Opening OAuth window:', data.authUrl);
 
         // Open OAuth window
         const authWindow = window.open(
