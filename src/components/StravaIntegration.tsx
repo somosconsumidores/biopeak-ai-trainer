@@ -3,6 +3,7 @@ import { useStravaIntegration } from "@/hooks/useStravaIntegration";
 import StravaConnectionStatus from "./StravaConnectionStatus";
 import StravaActivityList from "./StravaActivityList";
 import StravaDebugPanel from "./StravaDebugPanel";
+import StravaDebugInfo from "./StravaDebugInfo";
 
 const StravaIntegration = () => {
   const {
@@ -28,8 +29,9 @@ const StravaIntegration = () => {
 
       {isConnected && <StravaActivityList activities={activities} />}
       
-      {/* Debug panel - remover em produção */}
+      {/* Debug panels - remover em produção */}
       <StravaDebugPanel />
+      <StravaDebugInfo />
     </div>
   );
 };

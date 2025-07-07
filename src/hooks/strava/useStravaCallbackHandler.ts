@@ -26,6 +26,7 @@ export const useStravaCallbackHandler = ({
     const state = urlParams.get('state');
     const storedState = localStorage.getItem('strava_state');
     const isConnecting = localStorage.getItem('strava_connecting') === 'true';
+    const isOnStravaPage = window.location.pathname === '/strava';
     
     console.log('[useStravaCallbackHandler] ===== CALLBACK CHECK =====');
     console.log('[useStravaCallbackHandler] Current URL:', window.location.href);
@@ -40,8 +41,10 @@ export const useStravaCallbackHandler = ({
       storedState,
       stateMatches: state === storedState,
       isConnecting,
+      isOnStravaPage,
       user: user?.id,
       hasUser: !!user,
+      timestamp: new Date().toISOString(),
       allParams: Array.from(urlParams.entries())
     });
     console.log('[useStravaCallbackHandler] LocalStorage state:', {

@@ -49,9 +49,37 @@ const StravaConnectionStatus = ({
           <>
             <Button 
               onClick={() => {
+                console.log('[StravaConnectionStatus] ===== STRAVA CONNECTION ATTEMPT =====');
                 console.log('[StravaConnectionStatus] Button clicked - calling onConnect');
-                console.log('[StravaConnectionStatus] Button state:', { isConnecting, stravaConfig });
+                console.log('[StravaConnectionStatus] Button state:', { 
+                  isConnecting, 
+                  hasStravaConfig: !!stravaConfig,
+                  stravaConfig,
+                  currentUrl: window.location.href,
+                  localStorage: {
+                    connecting: localStorage.getItem('strava_connecting'),
+                    state: localStorage.getItem('strava_state'),
+                    processedCode: localStorage.getItem('strava_processed_code')
+                  }
+                });
                 console.log('[StravaConnectionStatus] About to redirect to Strava auth...');
+                
+                // Clear any previous state before connecting
+                localStorage.removeItem('strava_connecting');
+                localStorage.removeItem('strava_state');
+                localStorage.removeItem('strava_processed_code');
+                localStorage.removeItem('strava_connect_time');
+                
+                // Clean URL parameters
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.delete('code');
+                currentUrl.searchParams.delete('state');
+                currentUrl.searchParams.delete('scope');
+                currentUrl.searchParams.delete('error');
+                currentUrl.searchParams.delete('error_description');
+                window.history.replaceState({}, document.title, currentUrl.pathname);
+                
+                console.log('[StravaConnectionStatus] Cleaned previous state, calling onConnect...');
                 onConnect();
               }}
               disabled={isConnecting || !stravaConfig}
@@ -62,10 +90,12 @@ const StravaConnectionStatus = ({
             </Button>
             <Button 
               onClick={() => {
+                console.log('[StravaConnectionStatus] Reset button clicked - clearing all state');
                 // Force clean all OAuth state and URL
                 localStorage.clear();
                 sessionStorage.clear();
                 window.history.replaceState({}, document.title, window.location.pathname);
+                console.log('[StravaConnectionStatus] All state cleared, reloading page...');
                 window.location.reload();
               }}
               variant="outline"
