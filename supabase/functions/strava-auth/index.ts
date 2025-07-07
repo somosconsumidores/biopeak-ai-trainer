@@ -96,7 +96,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { code } = requestBody
+    const { code, redirect_uri } = requestBody
+    
+    console.log('[strava-auth] Received authorization code and redirect_uri:', {
+      hasCode: !!code,
+      codeLength: code?.length,
+      redirect_uri
+    })
     
     console.log('[strava-auth] Received authorization code:', code ? 'present' : 'missing')
     
@@ -127,11 +133,21 @@ Deno.serve(async (req) => {
     }
     
     console.log('[strava-auth] Exchanging code for token...')
-    console.log('[strava-auth] Request body:', {
+    
+    const tokenRequestBody = {
+      client_id: clientId,
+      client_secret: clientSecret,
+      code: code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirect_uri
+    };
+    
+    console.log('[strava-auth] Token request body:', {
       client_id: clientId,
       client_secret: clientSecret ? 'configured' : 'missing',
       code: code,
-      grant_type: 'authorization_code'
+      grant_type: 'authorization_code',
+      redirect_uri: redirect_uri
     })
     
     const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
@@ -139,12 +155,7 @@ Deno.serve(async (req) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
-        code: code,
-        grant_type: 'authorization_code',
-      }),
+      body: JSON.stringify(tokenRequestBody),
     })
 
     if (!tokenResponse.ok) {

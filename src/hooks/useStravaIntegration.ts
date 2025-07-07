@@ -228,7 +228,10 @@ export const useStravaIntegration = () => {
             'Content-Type': 'application/json',
             'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5dG9ya2ptenhzY3lhZWZraG5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3MzM0MTcsImV4cCI6MjA2NzMwOTQxN30.9V0Ir3gtRY3IfiCef7Nu2TKgRczDDYt2Edm1Bo_luAI'
           },
-          body: JSON.stringify({ code })
+          body: JSON.stringify({ 
+            code,
+            redirect_uri: stravaConfig.redirectUri 
+          })
         });
         
         const result = await response.json();
