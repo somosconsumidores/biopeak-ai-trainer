@@ -23,22 +23,42 @@ interface StravaActivity {
 }
 
 Deno.serve(async (req) => {
+  console.log('[strava-sync] Function called, method:', req.method)
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('[strava-sync] Handling CORS preflight')
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    console.log('[strava-sync] Starting sync process...')
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     )
+    console.log('[strava-sync] Supabase client created')
 
-    const authHeader = req.headers.get('Authorization')!
+    const authHeader = req.headers.get('Authorization')
+    console.log('[strava-sync] Auth header present:', !!authHeader)
+    
+    if (!authHeader) {
+      console.error('[strava-sync] No Authorization header')
+      return new Response(JSON.stringify({ error: 'Authorization header required' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    
     const token = authHeader.replace('Bearer ', '')
+    console.log('[strava-sync] Token extracted, length:', token?.length)
     
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
+    console.log('[strava-sync] Auth check result:', { hasUser: !!user, authError: !!authError })
+    
     if (authError || !user) {
+      console.error('[strava-sync] Authentication failed:', authError?.message)
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -305,8 +325,17 @@ Deno.serve(async (req) => {
     })
 
   } catch (error) {
-    console.error('Error in strava-sync function:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    console.error('[strava-sync] Caught error:', error)
+    console.error('[strava-sync] Error message:', error?.message)
+    console.error('[strava-sync] Error stack:', error?.stack)
+    console.error('[strava-sync] Error name:', error?.name)
+    
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error',
+      details: error?.message || 'Unknown error',
+      errorType: error?.name || 'Unknown',
+      timestamp: new Date().toISOString()
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
