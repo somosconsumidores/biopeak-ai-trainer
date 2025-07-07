@@ -21,31 +21,73 @@ export const useStravaIntegration = () => {
     }
   }, [user]);
 
-  const loadStravaConfig = async () => {
+  const loadStravaConfig = async (retryCount = 0) => {
     try {
-      console.log('[useStravaIntegration] Loading Strava config from edge function...');
+      console.log(`[useStravaIntegration] Loading Strava config from edge function... (attempt ${retryCount + 1})`);
       
-      const { data, error } = await supabase.functions.invoke('strava-config');
+      // Production fallback configuration
+      const isProduction = window.location.hostname === 'biopeak-ai.com';
+      const fallbackConfig = {
+        clientId: '142473', // Known Strava client ID for BioPeak
+        redirectUri: isProduction ? 'https://biopeak-ai.com/' : window.location.origin + '/'
+      };
+      
+      const { data, error } = await supabase.functions.invoke('strava-config', {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('[useStravaIntegration] Edge function response:', { data, error, isProduction });
       
       if (error) {
-        console.error('[useStravaIntegration] Error loading config:', error);
-        toast.error('Erro ao carregar configuração do Strava.');
+        console.error('[useStravaIntegration] Edge function error:', error);
+        
+        // Retry logic for network failures
+        if (retryCount < 2 && (error.message?.includes('network') || error.message?.includes('fetch'))) {
+          console.log('[useStravaIntegration] Retrying in 2 seconds...');
+          setTimeout(() => loadStravaConfig(retryCount + 1), 2000);
+          return;
+        }
+        
+        // Use fallback for production
+        if (isProduction) {
+          console.log('[useStravaIntegration] Using production fallback config');
+          setStravaConfig(fallbackConfig);
+          return;
+        }
+        
+        toast.error('Erro ao carregar configuração do Strava. Usando configuração de emergência.');
+        setStravaConfig(fallbackConfig);
         return;
       }
       
       if (data?.clientId) {
-        console.log('[useStravaIntegration] Config loaded successfully');
+        console.log('[useStravaIntegration] Config loaded successfully from edge function');
         setStravaConfig({
           clientId: data.clientId,
-          redirectUri: data.redirectUri || window.location.origin + '/'
+          redirectUri: data.redirectUri || fallbackConfig.redirectUri
         });
       } else {
-        console.error('[useStravaIntegration] No client ID received');
-        toast.error('Configuração do Strava incompleta.');
+        console.warn('[useStravaIntegration] No client ID from edge function, using fallback');
+        setStravaConfig(fallbackConfig);
       }
     } catch (error) {
       console.error('[useStravaIntegration] Exception loading config:', error);
-      toast.error('Erro na configuração do Strava.');
+      
+      // Always provide fallback configuration
+      const isProduction = window.location.hostname === 'biopeak-ai.com';
+      const fallbackConfig = {
+        clientId: '142473',
+        redirectUri: isProduction ? 'https://biopeak-ai.com/' : window.location.origin + '/'
+      };
+      
+      console.log('[useStravaIntegration] Using fallback config due to exception');
+      setStravaConfig(fallbackConfig);
+      
+      if (retryCount === 0) {
+        toast.error('Configuração carregada em modo offline.');
+      }
     } finally {
       setLoading(false);
     }

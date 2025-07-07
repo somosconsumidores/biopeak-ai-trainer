@@ -52,7 +52,7 @@ const StravaConnectionStatus = ({
             className="bg-orange-500 hover:bg-orange-600 text-white"
           >
             <ExternalLink className="w-4 h-4 mr-2" />
-            {isConnecting ? 'Conectando...' : !stravaConfig ? 'Configuração indisponível' : 'Conectar ao Strava'}
+            {isConnecting ? 'Conectando...' : !stravaConfig ? 'Carregando configuração...' : 'Conectar ao Strava'}
           </Button>
         ) : (
           <Button 
@@ -65,16 +65,10 @@ const StravaConnectionStatus = ({
           </Button>
         )}
         
-        {!stravaConfig && (
-          <p className="text-sm text-muted-foreground">
-            Carregando configuração...
-          </p>
-        )}
-        
-        {stravaConfig?.fallback && (
-          <p className="text-sm text-yellow-400">
-            ⚠️ Modo fallback ativo - funcionalidade limitada
-          </p>
+        {stravaConfig && process.env.NODE_ENV === 'development' && (
+          <div className="text-xs text-muted-foreground mt-2">
+            Debug: Client ID {stravaConfig.clientId}, Redirect: {stravaConfig.redirectUri}
+          </div>
         )}
       </div>
     </Card>
