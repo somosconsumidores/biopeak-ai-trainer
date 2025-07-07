@@ -22,14 +22,10 @@ const Auth = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
 
-  // Redirect authenticated users to main page (new users are handled in AuthContext)
+  // Redirect authenticated users back to main app
   useEffect(() => {
     if (user) {
-      // Only redirect existing users to main page
-      const isNewUser = localStorage.getItem('is_new_user') === 'true';
-      if (!isNewUser) {
-        navigate('/');
-      }
+      navigate('/');
     }
   }, [user, navigate]);
 
@@ -46,13 +42,11 @@ const Auth = () => {
         variant: "destructive",
       });
     } else {
-      toast({
-        title: "Login realizado com sucesso!",
-        description: "Bem-vindo ao BioPeak",
-      });
-      // Login users go to main page directly
-      navigate('/');
-    }
+        toast({
+          title: "Login realizado com sucesso!",
+          description: "Bem-vindo ao BioPeak",
+        });
+      }
     
     setLoading(false);
   };

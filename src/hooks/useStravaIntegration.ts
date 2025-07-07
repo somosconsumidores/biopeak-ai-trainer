@@ -13,7 +13,8 @@ export const useStravaIntegration = () => {
   
   // IMMEDIATE fallback configuration - always available
   const getDefaultConfig = () => {
-    const isProduction = window.location.hostname === 'biopeak-ai.com';
+    const isProduction = window.location.hostname === 'biopeak-ai.com' || 
+                         window.location.hostname === 'www.biopeak-ai.com';
     return {
       clientId: '142473',
       redirectUri: isProduction ? 'https://biopeak-ai.com/' : `${window.location.origin}/`,

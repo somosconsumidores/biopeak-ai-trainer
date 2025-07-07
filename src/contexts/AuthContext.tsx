@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 
 interface AuthContextType {
   user: User | null;
@@ -33,18 +34,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-        
-        // Handle new user redirection
-        if (event === 'SIGNED_IN' && session?.user) {
-          const isNewUser = localStorage.getItem('is_new_user') === 'true';
-          if (isNewUser) {
-            localStorage.removeItem('is_new_user');
-            // Use setTimeout to ensure this runs after the component state updates
-            setTimeout(() => {
-              window.location.href = '/strava';
-            }, 100);
-          }
-        }
       }
     );
 
