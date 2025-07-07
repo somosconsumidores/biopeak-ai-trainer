@@ -292,6 +292,8 @@ export const useStravaIntegration = () => {
     const code = urlParams.get('code');
     const error = urlParams.get('error');
     const errorDescription = urlParams.get('error_description');
+    const state = urlParams.get('state');
+    const storedState = localStorage.getItem('strava_state');
     const isConnecting = localStorage.getItem('strava_connecting') === 'true';
     
     console.log('[useStravaIntegration] Checking for OAuth callback:', {
@@ -300,8 +302,12 @@ export const useStravaIntegration = () => {
       hasError: !!error,
       error,
       errorDescription,
+      state,
+      storedState,
+      stateMatches: state === storedState,
       isConnecting,
-      localStorage: localStorage.getItem('strava_connecting')
+      localStorage: localStorage.getItem('strava_connecting'),
+      allParams: Array.from(urlParams.entries())
     });
     
     if (error && isConnecting) {
@@ -323,7 +329,19 @@ export const useStravaIntegration = () => {
     }
     
     if (code && isConnecting) {
+      // Validate state parameter for security
+      if (state && storedState && state !== storedState) {
+        console.error('[useStravaIntegration] State parameter mismatch - possible CSRF attack');
+        toast.error('Erro de segurança na autenticação. Tente novamente.');
+        localStorage.removeItem('strava_connecting');
+        localStorage.removeItem('strava_state');
+        setIsConnecting(false);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+      
       console.log('[useStravaIntegration] Processing Strava OAuth callback...');
+      localStorage.removeItem('strava_state'); // Clean up state
       handleStravaCallback(code);
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (code && !isConnecting) {
