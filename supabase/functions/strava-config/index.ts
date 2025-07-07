@@ -63,12 +63,20 @@ Deno.serve(async (req) => {
       redirectUri = 'https://biopeak-ai.com/'
       console.log('[strava-config] Detected production environment via origin')
     } else if (origin) {
-      // For local development or other environments
+      // For preview, local development or other environments
       try {
         const url = new URL(origin)
-        if (url.hostname === 'localhost' || url.hostname.includes('127.0.0.1') || url.hostname.includes('lovable.app')) {
+        const hostname = url.hostname
+        
+        if (hostname === 'localhost' || hostname.includes('127.0.0.1')) {
           redirectUri = `${url.origin}/`
-          console.log('[strava-config] Using development/preview environment:', redirectUri)
+          console.log('[strava-config] Using local development environment:', redirectUri)
+        } else if (hostname.includes('lovable.app') || hostname.includes('lovableproject.com')) {
+          redirectUri = `${url.origin}/`
+          console.log('[strava-config] Using preview environment:', redirectUri)
+        } else {
+          redirectUri = `${url.origin}/`
+          console.log('[strava-config] Using other environment:', redirectUri)
         }
       } catch (e) {
         console.warn('[strava-config] Failed to parse origin, using production fallback:', e)
