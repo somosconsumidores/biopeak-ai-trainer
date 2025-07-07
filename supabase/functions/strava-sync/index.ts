@@ -160,26 +160,59 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch activities from Strava
+    // Fetch activities from Strava with pagination to get up to 350 activities
     console.log('[strava-sync] Fetching activities from Strava for user:', user.id)
-    const activitiesResponse = await fetch(
-      'https://www.strava.com/api/v3/athlete/activities?per_page=50',
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
+    
+    const maxActivities = 350
+    const perPage = 200 // Maximum allowed by Strava API
+    const activities: StravaActivity[] = []
+    let page = 1
+    
+    while (activities.length < maxActivities) {
+      const remainingActivities = maxActivities - activities.length
+      const currentPerPage = Math.min(perPage, remainingActivities)
+      
+      console.log(`[strava-sync] Fetching page ${page} with ${currentPerPage} activities per page`)
+      
+      const activitiesResponse = await fetch(
+        `https://www.strava.com/api/v3/athlete/activities?per_page=${currentPerPage}&page=${page}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (!activitiesResponse.ok) {
+        const errorText = await activitiesResponse.text()
+        console.error(`[strava-sync] Failed to fetch Strava activities (page ${page}):`, errorText)
+        return new Response(JSON.stringify({ error: 'Failed to fetch activities from Strava' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
-    )
 
-    if (!activitiesResponse.ok) {
-      console.error('Failed to fetch Strava activities:', await activitiesResponse.text())
-      return new Response(JSON.stringify({ error: 'Failed to fetch activities from Strava' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      const pageActivities: StravaActivity[] = await activitiesResponse.json()
+      console.log(`[strava-sync] Received ${pageActivities.length} activities from page ${page}`)
+      
+      // If no more activities, break the loop
+      if (pageActivities.length === 0) {
+        console.log('[strava-sync] No more activities available')
+        break
+      }
+      
+      activities.push(...pageActivities)
+      
+      // If we got fewer activities than requested, we've reached the end
+      if (pageActivities.length < currentPerPage) {
+        console.log('[strava-sync] Reached end of activities')
+        break
+      }
+      
+      page++
     }
-
-    const activities: StravaActivity[] = await activitiesResponse.json()
+    
+    console.log(`[strava-sync] Total activities fetched: ${activities.length}`)
     let syncedCount = 0
 
     // Store activities in database
