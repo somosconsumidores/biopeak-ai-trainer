@@ -47,7 +47,11 @@ export const useStravaIntegration = () => {
   useEffect(() => {
     // Try to load from edge function but don't block UI
     loadStravaConfig();
+  }, []);
+
+  useEffect(() => {
     if (user) {
+      console.log('[useStravaIntegration] User authenticated, checking Strava connection...');
       checkStravaConnection();
       loadActivities();
     }
