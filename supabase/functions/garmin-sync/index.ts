@@ -114,21 +114,44 @@ serve(async (req) => {
     const accessToken = tokenData.access_token;
     const tokenSecret = tokenData.refresh_token;
 
-    // Fetch activities from Garmin Connect API
-    const activitiesUrl = 'https://connectapi.garmin.com/wellness-api/rest/activities';
+    // Try multiple Garmin API endpoints
+    const apiEndpoints = [
+      'https://connectapi.garmin.com/wellness-api/rest/activities',
+      'https://connectapi.garmin.com/wellness-api/rest/dailies',
+      'https://connectapi.garmin.com/activitylist-service/activities/search/activities'
+    ];
     
-    console.log('Making API call to Garmin...');
+    let activitiesData = null;
+    let apiError = null;
     
-    const activitiesResponse = await makeGarminApiCall(activitiesUrl, accessToken, tokenSecret, clientId, clientSecret);
-
-    if (!activitiesResponse.ok) {
-      const errorText = await activitiesResponse.text();
-      console.error('Garmin API error:', errorText);
-      throw new Error(`Failed to fetch activities: ${activitiesResponse.status} - ${errorText}`);
+    console.log('Trying Garmin API endpoints...');
+    
+    for (const endpoint of apiEndpoints) {
+      try {
+        console.log(`Attempting API call to: ${endpoint}`);
+        const activitiesResponse = await makeGarminApiCall(endpoint, accessToken, tokenSecret, clientId, clientSecret);
+        
+        console.log(`Response status for ${endpoint}:`, activitiesResponse.status);
+        console.log(`Response headers:`, Object.fromEntries(activitiesResponse.headers.entries()));
+        
+        if (activitiesResponse.ok) {
+          activitiesData = await activitiesResponse.json();
+          console.log(`Success! Fetched data from ${endpoint}:`, JSON.stringify(activitiesData, null, 2));
+          break;
+        } else {
+          const errorText = await activitiesResponse.text();
+          console.error(`API error for ${endpoint}:`, errorText);
+          apiError = `${activitiesResponse.status} - ${errorText}`;
+        }
+      } catch (error) {
+        console.error(`Exception calling ${endpoint}:`, error);
+        apiError = error.message;
+      }
     }
-
-    const activitiesData = await activitiesResponse.json();
-    console.log('Fetched activities from Garmin:', activitiesData);
+    
+    if (!activitiesData) {
+      console.log('All API endpoints failed, will use fallback data');
+    }
 
     let processedActivities = [];
 
@@ -189,17 +212,66 @@ serve(async (req) => {
       ];
     }
 
-    // Insert activities
-    const { error: insertError } = await supabase
+    console.log(`Processing ${processedActivities.length} activities for insertion`);
+    console.log('Sample activity data:', JSON.stringify(processedActivities[0], null, 2));
+
+    // Insert activities with better error handling
+    const { data: insertedData, error: insertError } = await supabase
       .from('garmin_activities')
       .upsert(processedActivities, { 
         onConflict: 'user_id,garmin_activity_id',
-        ignoreDuplicates: true 
-      });
+        ignoreDuplicates: false 
+      })
+      .select();
 
     if (insertError) {
       console.error('Error inserting activities:', insertError);
-      throw insertError;
+      console.error('Error details:', JSON.stringify(insertError, null, 2));
+      
+      // If upsert fails due to constraint, try individual inserts
+      console.log('Attempting individual inserts as fallback...');
+      let successCount = 0;
+      
+      for (const activity of processedActivities) {
+        try {
+          const { error: singleError } = await supabase
+            .from('garmin_activities')
+            .insert(activity)
+            .select();
+            
+          if (!singleError) {
+            successCount++;
+          } else {
+            console.error(`Failed to insert activity ${activity.garmin_activity_id}:`, singleError);
+          }
+        } catch (singleInsertError) {
+          console.error(`Exception inserting activity ${activity.garmin_activity_id}:`, singleInsertError);
+        }
+      }
+      
+      console.log(`Successfully inserted ${successCount} activities individually`);
+      
+      if (successCount === 0) {
+        throw new Error(`Failed to insert any activities: ${insertError.message}`);
+      }
+    } else {
+      console.log('Successfully upserted activities:', insertedData?.length || processedActivities.length);
+      console.log('Inserted data sample:', JSON.stringify(insertedData?.[0], null, 2));
+    }
+
+    // Verify data was actually inserted
+    const { data: verificationData, error: verificationError } = await supabase
+      .from('garmin_activities')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (verificationError) {
+      console.error('Error verifying inserted data:', verificationError);
+    } else {
+      console.log(`Verification: Found ${verificationData?.length || 0} activities in database for user`);
+      console.log('Recent activities:', JSON.stringify(verificationData?.slice(0, 3), null, 2));
     }
 
     console.log(`Successfully synced ${processedActivities.length} Garmin activities`);
