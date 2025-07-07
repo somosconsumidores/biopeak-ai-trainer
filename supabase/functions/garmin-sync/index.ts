@@ -142,23 +142,26 @@ serve(async (req) => {
       syncStatus = 'api_success';
       
       processedActivities = activitiesData.map((activity: any, index: number) => {
-        const activityId = activity.activityId || activity.id || activity.activityUuid || (Date.now() + index);
+        // Map official API response fields to our database structure
+        const activityId = activity.activityId || activity.summaryId || (Date.now() + index);
         
         return {
           user_id: user.id,
           garmin_activity_id: parseInt(activityId.toString()) || (Date.now() + index),
-          name: activity.activityName || activity.name || activity.activityType?.typeKey || `Garmin Activity ${index + 1}`,
-          type: (activity.activityType?.typeKey || activity.activityType || activity.type || 'unknown').toLowerCase(),
-          start_date: activity.startTimeLocal || activity.startTime || activity.beginTimestamp || new Date().toISOString(),
-          distance: activity.distance ? Math.round(parseFloat(activity.distance) * 1000) : null,
-          moving_time: activity.movingDuration || activity.duration || activity.elapsedDuration || null,
-          elapsed_time: activity.elapsedDuration || activity.duration || activity.movingDuration || null,
-          average_speed: parseFloat(activity.averageSpeed) || null,
-          max_speed: parseFloat(activity.maxSpeed) || null,
-          average_heartrate: parseInt(activity.averageHR) || parseInt(activity.avgHR) || null,
-          max_heartrate: parseInt(activity.maxHR) || null,
-          calories: parseInt(activity.calories) || null,
-          total_elevation_gain: parseFloat(activity.elevationGain) || null,
+          name: activity.activityName || `${activity.activityType || 'Activity'} ${index + 1}`,
+          type: (activity.activityType || 'unknown').toLowerCase(),
+          start_date: activity.startTimeInSeconds 
+            ? new Date(activity.startTimeInSeconds * 1000).toISOString() 
+            : new Date().toISOString(),
+          distance: activity.distanceInMeters || null,
+          moving_time: activity.durationInSeconds || null,
+          elapsed_time: activity.durationInSeconds || null,
+          average_speed: activity.averageSpeedInMetersPerSecond || null,
+          max_speed: activity.maxSpeedInMetersPerSecond || null,
+          average_heartrate: activity.averageHeartRateInBeatsPerMinute || null,
+          max_heartrate: activity.maxHeartRateInBeatsPerMinute || null,
+          calories: activity.activeKilocalories || null,
+          total_elevation_gain: activity.totalElevationGainInMeters || null,
         };
       });
     } else {
