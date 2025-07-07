@@ -18,12 +18,17 @@ interface StravaTokenResponse {
 }
 
 Deno.serve(async (req) => {
+  console.log(`[strava-auth] ${req.method} request received from ${req.headers.get('origin') || 'unknown'}`)
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('[strava-auth] Handling CORS preflight')
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    console.log('[strava-auth] Starting authentication process...')
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
@@ -31,7 +36,7 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      console.error('No Authorization header provided')
+      console.error('[strava-auth] No Authorization header provided')
       return new Response(JSON.stringify({ error: 'Authorization header required' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -39,11 +44,11 @@ Deno.serve(async (req) => {
     }
     
     const token = authHeader.replace('Bearer ', '')
-    console.log('Auth token present:', !!token)
+    console.log('[strava-auth] Auth token present:', !!token)
     
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
     if (authError) {
-      console.error('Auth error:', authError)
+      console.error('[strava-auth] Auth error:', authError)
       return new Response(JSON.stringify({ error: 'Authentication failed', details: authError.message }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -51,21 +56,33 @@ Deno.serve(async (req) => {
     }
     
     if (!user) {
-      console.error('No user found from token')
+      console.error('[strava-auth] No user found from token')
       return new Response(JSON.stringify({ error: 'User not found' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
     
-    console.log('Authenticated user:', user.id)
+    console.log('[strava-auth] Authenticated user:', user.id)
 
-    const { code } = await req.json()
+    let requestBody;
+    try {
+      requestBody = await req.json()
+      console.log('[strava-auth] Request body parsed successfully')
+    } catch (parseError) {
+      console.error('[strava-auth] Failed to parse request body:', parseError)
+      return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const { code } = requestBody
     
-    console.log('Received authorization code:', code ? 'present' : 'missing')
+    console.log('[strava-auth] Received authorization code:', code ? 'present' : 'missing')
     
     if (!code) {
-      console.error('No authorization code provided')
+      console.error('[strava-auth] No authorization code provided')
       return new Response(JSON.stringify({ error: 'Authorization code required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -76,11 +93,11 @@ Deno.serve(async (req) => {
     const clientId = Deno.env.get('STRAVA_CLIENT_ID')
     const clientSecret = Deno.env.get('STRAVA_CLIENT_SECRET')
     
-    console.log('Using client ID:', clientId ? 'configured' : 'missing')
-    console.log('Using client secret:', clientSecret ? 'configured' : 'missing')
+    console.log('[strava-auth] Using client ID:', clientId ? 'configured' : 'missing')
+    console.log('[strava-auth] Using client secret:', clientSecret ? 'configured' : 'missing')
     
     if (!clientId || !clientSecret) {
-      console.error('Missing Strava credentials - Client ID:', !!clientId, 'Client Secret:', !!clientSecret)
+      console.error('[strava-auth] Missing Strava credentials - Client ID:', !!clientId, 'Client Secret:', !!clientSecret)
       return new Response(JSON.stringify({ 
         error: 'Strava credentials not configured',
         details: `Missing: ${!clientId ? 'STRAVA_CLIENT_ID ' : ''}${!clientSecret ? 'STRAVA_CLIENT_SECRET' : ''}`.trim()
@@ -90,7 +107,7 @@ Deno.serve(async (req) => {
       })
     }
     
-    console.log('Exchanging code for token...')
+    console.log('[strava-auth] Exchanging code for token...')
     const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -106,7 +123,7 @@ Deno.serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      console.error('Strava token exchange failed:', {
+      console.error('[strava-auth] Strava token exchange failed:', {
         status: tokenResponse.status,
         statusText: tokenResponse.statusText,
         body: errorText
@@ -121,6 +138,7 @@ Deno.serve(async (req) => {
     }
 
     const tokenData: StravaTokenResponse = await tokenResponse.json()
+    console.log('[strava-auth] Token exchange successful, storing in database...')
     
     // Store tokens in database
     const { error: upsertError } = await supabaseClient
@@ -133,14 +151,14 @@ Deno.serve(async (req) => {
       })
 
     if (upsertError) {
-      console.error('Error storing Strava tokens:', upsertError)
-      return new Response(JSON.stringify({ error: 'Failed to store tokens' }), {
+      console.error('[strava-auth] Error storing Strava tokens:', upsertError)
+      return new Response(JSON.stringify({ error: 'Failed to store tokens', details: upsertError.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    console.log('Strava integration successful for user:', user.id)
+    console.log('[strava-auth] Strava integration successful for user:', user.id)
 
     return new Response(JSON.stringify({ 
       success: true,
@@ -150,8 +168,12 @@ Deno.serve(async (req) => {
     })
 
   } catch (error) {
-    console.error('Error in strava-auth function:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    console.error('[strava-auth] Error in strava-auth function:', error)
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error', 
+      details: error.message,
+      timestamp: new Date().toISOString()
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

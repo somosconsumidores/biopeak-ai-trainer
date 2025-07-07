@@ -141,45 +141,86 @@ export const useStravaIntegration = () => {
   };
 
   const handleStravaCallback = async (code: string) => {
+    console.log('[useStravaIntegration] Starting Strava callback with code:', code)
     setIsConnecting(true);
     
-    try {
-      console.log('Processing Strava callback with code:', code);
-      
-      const { data, error } = await supabase.functions.invoke('strava-auth', {
-        body: { code },
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      console.log('Strava auth response:', { data, error });
-
-      if (error) {
-        console.error('Strava auth error:', error);
-        throw error;
-      }
-
-      if (data?.success) {
-        setIsConnected(true);
-        toast.success(`Conectado ao Strava com sucesso! Bem-vindo, ${data.athlete?.firstname || 'Atleta'}!`);
-        localStorage.removeItem('strava_connecting');
+    const maxRetries = 3;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        attempt++;
+        console.log(`[useStravaIntegration] Attempt ${attempt}/${maxRetries} - Processing Strava callback...`);
         
-        // Auto-sync activities after successful connection
-        console.log('[useStravaIntegration] Auto-syncing activities after connection...');
-        setTimeout(() => handleSync(), 1000);
-      } else {
-        console.error('Strava auth failed:', data);
-        throw new Error(data?.error || 'Failed to connect to Strava');
+        const { data, error } = await supabase.functions.invoke('strava-auth', {
+          body: { code },
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log(`[useStravaIntegration] Strava auth response (attempt ${attempt}):`, { 
+          data, 
+          error,
+          hasData: !!data,
+          hasError: !!error 
+        });
+
+        if (error) {
+          console.error(`[useStravaIntegration] Strava auth error (attempt ${attempt}):`, error);
+          
+          // If this is the last attempt, throw the error
+          if (attempt === maxRetries) {
+            throw new Error(`Falha na autenticação após ${maxRetries} tentativas: ${error.message || JSON.stringify(error)}`);
+          }
+          
+          // Wait before retrying (exponential backoff)
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`[useStravaIntegration] Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        if (data?.success) {
+          setIsConnected(true);
+          toast.success(`Conectado ao Strava com sucesso! Bem-vindo, ${data.athlete?.firstname || 'Atleta'}!`);
+          localStorage.removeItem('strava_connecting');
+          
+          // Auto-sync activities after successful connection
+          console.log('[useStravaIntegration] Auto-syncing activities after connection...');
+          setTimeout(() => handleSync(), 1000);
+          return; // Success, exit the retry loop
+        } else {
+          const errorMsg = data?.error || data?.details || 'Resposta inválida do servidor';
+          console.error(`[useStravaIntegration] Strava auth failed (attempt ${attempt}):`, data);
+          
+          if (attempt === maxRetries) {
+            throw new Error(`Falha na conexão: ${errorMsg}`);
+          }
+          
+          // Wait before retrying
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`[useStravaIntegration] Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } catch (error) {
+        console.error(`[useStravaIntegration] Error on attempt ${attempt}:`, error);
+        
+        if (attempt === maxRetries) {
+          const errorMessage = error?.message || error?.details || 'Erro desconhecido na conexão';
+          toast.error(`Erro ao conectar com Strava: ${errorMessage}`);
+          localStorage.removeItem('strava_connecting');
+          break;
+        }
+        
+        // Wait before retrying
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`[useStravaIntegration] Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-    } catch (error) {
-      console.error('Error connecting to Strava:', error);
-      const errorMessage = error?.message || error?.details || 'Tente novamente.';
-      toast.error(`Erro ao conectar com Strava: ${errorMessage}`);
-      localStorage.removeItem('strava_connecting');
-    } finally {
-      setIsConnecting(false);
     }
+    
+    setIsConnecting(false);
   };
 
   const handleSync = async () => {
