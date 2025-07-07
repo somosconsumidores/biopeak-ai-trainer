@@ -94,9 +94,9 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
         </div>
       )}
 
-      {/* Strava Integration Button */}
+      {/* Integrations Section */}
       {!isCollapsed && (
-        <div className="mb-4">
+        <div className="mb-4 space-y-2">
           <Button
             variant="ghost"
             size="sm"
@@ -108,6 +108,18 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
           >
             <Activity className="w-4 h-4 mr-2" />
             Integração Strava
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground hover:text-foreground hover:text-blue-500"
+            onClick={() => {
+              console.log('Desktop Garmin button clicked - navigating to /garmin');
+              navigate('/garmin');
+            }}
+          >
+            <Activity className="w-4 h-4 mr-2" />
+            Integração Garmin
           </Button>
         </div>
       )}

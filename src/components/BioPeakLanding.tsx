@@ -62,13 +62,13 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
       <section className="container mx-auto px-4 sm:px-6 py-12 sm:py-20 text-center">
         <div className="max-w-4xl mx-auto animate-fade-in">
           <Badge className="mb-4 sm:mb-6 glass border-primary/50 text-primary text-xs sm:text-sm">
-            🚀 Powered by AI • Conecta com Garmin
+            🚀 Powered by AI • Conecta com Strava & Garmin
           </Badge>
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-black mb-4 sm:mb-6 bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent leading-tight">
             Transforme seus treinos em estratégia
           </h1>
           <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-muted-foreground mb-6 sm:mb-8 max-w-3xl mx-auto leading-relaxed px-2">
-            BioPeak usa inteligência artificial para analisar seus dados de treino Garmin e entregar insights que realmente fazem você evoluir. Porque treino é físico, mas evolução é nos dados.
+            BioPeak usa inteligência artificial para analisar seus dados de treino do Strava e Garmin Connect, entregando insights que realmente fazem você evoluir. Porque treino é físico, mas evolução é nos dados.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 justify-center items-center mb-8 sm:mb-12 px-4">
             {user ? (
@@ -182,13 +182,13 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
             Pronto para evoluir?
           </h2>
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-2">
-            Conecte seu Garmin e descubra insights que você nunca imaginou sobre seus treinos
+            Conecte seu Strava ou Garmin Connect e descubra insights que você nunca imaginou sobre seus treinos
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 justify-center">
             {user ? (
               <Button variant="hero" size="lg" className="w-full sm:min-w-48 sm:w-auto h-12 sm:h-auto" onClick={onEnterApp}>
                 <Activity className="w-5 h-5 mr-2" />
-                Conectar Garmin
+                Conectar Plataformas
               </Button>
             ) : (
               <Button variant="hero" size="lg" className="w-full sm:min-w-48 sm:w-auto h-12 sm:h-auto" onClick={() => navigate('/auth')}>

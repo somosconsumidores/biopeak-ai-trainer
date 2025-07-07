@@ -51,6 +51,14 @@ const Dashboard = () => {
             <ExternalLink className="w-4 h-4 mr-2" />
             Strava
           </Button>
+          <Button 
+            variant="glass" 
+            size="sm"
+            onClick={() => navigate('/garmin')}
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Garmin
+          </Button>
           <Button variant="ai" size="sm">
             <Settings className="w-4 h-4 mr-2" />
             Configurar
