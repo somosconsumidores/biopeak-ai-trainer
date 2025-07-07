@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { useStravaIntegration } from "@/hooks/useStravaIntegration";
 import StravaConnectionStatus from "./StravaConnectionStatus";
 import StravaActivityList from "./StravaActivityList";
+import StravaDebugPanel from "./StravaDebugPanel";
 
 const StravaIntegration = () => {
   const {
@@ -26,6 +27,9 @@ const StravaIntegration = () => {
       />
 
       {isConnected && <StravaActivityList activities={activities} />}
+      
+      {/* Debug panel - remover em produção */}
+      <StravaDebugPanel />
     </div>
   );
 };

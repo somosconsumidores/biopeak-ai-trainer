@@ -28,6 +28,9 @@ Deno.serve(async (req) => {
 
   try {
     console.log('[strava-auth] Starting authentication process...')
+    console.log('[strava-auth] Request origin:', req.headers.get('origin'))
+    console.log('[strava-auth] Request referer:', req.headers.get('referer'))
+    console.log('[strava-auth] User agent:', req.headers.get('user-agent'))
     
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -232,6 +235,14 @@ Deno.serve(async (req) => {
     console.log('[strava-auth] Token exchange successful, storing in database...')
     
     // Store tokens in database
+    console.log('[strava-auth] About to store tokens in database for user:', user.id)
+    console.log('[strava-auth] Token data structure:', {
+      hasAccessToken: !!tokenData.access_token,
+      hasRefreshToken: !!tokenData.refresh_token,
+      expiresAt: tokenData.expires_at,
+      athlete: tokenData.athlete?.id
+    })
+    
     const { error: upsertError } = await supabaseClient
       .from('strava_tokens')
       .upsert({
@@ -240,6 +251,13 @@ Deno.serve(async (req) => {
         refresh_token: tokenData.refresh_token,
         expires_at: new Date(tokenData.expires_at * 1000).toISOString(),
       })
+
+    console.log('[strava-auth] Upsert result:', { 
+      error: upsertError,
+      errorCode: upsertError?.code,
+      errorMessage: upsertError?.message,
+      errorDetails: upsertError?.details
+    })
 
     if (upsertError) {
       console.error('[strava-auth] Error storing Strava tokens:', upsertError)
