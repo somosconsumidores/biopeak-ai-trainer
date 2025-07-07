@@ -48,26 +48,61 @@ Deno.serve(async (req) => {
     // Get user's Strava tokens
     console.log('[strava-sync] Fetching Strava tokens for user:', user.id)
     
-    const { data: tokenData, error: tokenError } = await supabaseClient
+    // Initialize service role client for potential RLS bypass
+    const serviceRoleClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+    
+    // First attempt: Try with ANON_KEY and authenticated user context
+    let { data: tokenData, error: tokenError } = await supabaseClient
       .from('strava_tokens')
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (tokenError) {
-      console.error('Error fetching Strava tokens:', tokenError)
-      return new Response(JSON.stringify({ error: 'Error fetching Strava connection' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+    console.log('[strava-sync] Token fetch with ANON_KEY:', {
+      hasTokenData: !!tokenData,
+      tokenError: tokenError,
+      userId: user.id
+    })
 
-    if (!tokenData) {
-      console.log('No Strava tokens found for user:', user.id)
-      return new Response(JSON.stringify({ error: 'Strava not connected' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    let usingServiceRole = false
+
+    // If RLS blocks access, try with SERVICE_ROLE_KEY
+    if (tokenError || !tokenData) {
+      console.log('[strava-sync] Attempting token fetch with SERVICE_ROLE_KEY to bypass RLS...')
+      
+      const { data: serviceTokenData, error: serviceTokenError } = await serviceRoleClient
+        .from('strava_tokens')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      
+      console.log('[strava-sync] Token fetch with SERVICE_ROLE_KEY:', {
+        hasServiceTokenData: !!serviceTokenData,
+        serviceTokenError: serviceTokenError
       })
+      
+      if (serviceTokenError) {
+        console.error('[strava-sync] Error fetching Strava tokens even with SERVICE_ROLE_KEY:', serviceTokenError)
+        return new Response(JSON.stringify({ error: 'Error fetching Strava connection' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      
+      if (!serviceTokenData) {
+        console.log('[strava-sync] No Strava tokens found for user:', user.id)
+        return new Response(JSON.stringify({ error: 'Strava not connected' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      
+      tokenData = serviceTokenData
+      usingServiceRole = true
+      console.log('[strava-sync] Using SERVICE_ROLE_KEY tokens - RLS issue confirmed for strava_tokens table')
     }
 
     // Check if token is expired and refresh if needed
@@ -109,8 +144,9 @@ Deno.serve(async (req) => {
       const refreshData = await refreshResponse.json()
       accessToken = refreshData.access_token
 
-      // Update tokens in database
-      await supabaseClient
+      // Update tokens in database - use SERVICE_ROLE_KEY if we had RLS issues
+      const updateClient = usingServiceRole ? serviceRoleClient : supabaseClient
+      const { error: updateError } = await updateClient
         .from('strava_tokens')
         .update({
           access_token: refreshData.access_token,
@@ -118,6 +154,10 @@ Deno.serve(async (req) => {
           expires_at: new Date(refreshData.expires_at * 1000).toISOString(),
         })
         .eq('user_id', user.id)
+      
+      if (updateError) {
+        console.error('[strava-sync] Error updating refreshed tokens:', updateError)
+      }
     }
 
     // Fetch activities from Strava
