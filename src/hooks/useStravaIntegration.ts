@@ -147,7 +147,10 @@ export const useStravaIntegration = () => {
       console.log('Processing Strava callback with code:', code);
       
       const { data, error } = await supabase.functions.invoke('strava-auth', {
-        body: { code }
+        body: { code },
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       console.log('Strava auth response:', { data, error });
@@ -171,7 +174,8 @@ export const useStravaIntegration = () => {
       }
     } catch (error) {
       console.error('Error connecting to Strava:', error);
-      toast.error(`Erro ao conectar com Strava: ${error.message || 'Tente novamente.'}`);
+      const errorMessage = error?.message || error?.details || 'Tente novamente.';
+      toast.error(`Erro ao conectar com Strava: ${errorMessage}`);
       localStorage.removeItem('strava_connecting');
     } finally {
       setIsConnecting(false);
