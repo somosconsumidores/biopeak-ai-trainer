@@ -108,6 +108,13 @@ Deno.serve(async (req) => {
     }
     
     console.log('[strava-auth] Exchanging code for token...')
+    console.log('[strava-auth] Request body:', {
+      client_id: clientId,
+      client_secret: clientSecret ? 'configured' : 'missing',
+      code: code,
+      grant_type: 'authorization_code'
+    })
+    
     const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: {
