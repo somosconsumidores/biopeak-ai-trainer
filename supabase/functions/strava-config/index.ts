@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
           redirectUri = `${url.origin}/strava`
           console.log('[strava-config] Using local development environment:', redirectUri)
         } else if (hostname.includes('lovable.app') || hostname.includes('lovableproject.com')) {
-          redirectUri = `${url.origin}/strava`
+          redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava'
           console.log('[strava-config] Using preview environment:', redirectUri)
         } else {
           redirectUri = `${url.origin}/strava`

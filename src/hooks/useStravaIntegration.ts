@@ -27,7 +27,7 @@ export const useStravaIntegration = () => {
       redirectUri = 'https://biopeak-ai.com/strava';
       console.log('[useStravaIntegration] Using production config');
     } else if (isPreview) {
-      redirectUri = `${origin}/strava`;
+      redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava';
       console.log('[useStravaIntegration] Using preview config:', redirectUri);
     } else {
       redirectUri = `${origin}/strava`;
