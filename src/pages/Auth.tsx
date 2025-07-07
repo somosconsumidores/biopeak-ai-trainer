@@ -22,10 +22,16 @@ const Auth = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
 
-  // Redirect authenticated users to main page
+  // Redirect authenticated users - new users go to Strava setup, existing users go to main page
   useEffect(() => {
     if (user) {
-      navigate('/');
+      const isNewUser = localStorage.getItem('is_new_user') === 'true';
+      if (isNewUser) {
+        localStorage.removeItem('is_new_user');
+        navigate('/strava');
+      } else {
+        navigate('/');
+      }
     }
   }, [user, navigate]);
 
@@ -46,6 +52,7 @@ const Auth = () => {
         title: "Login realizado com sucesso!",
         description: "Bem-vindo ao BioPeak",
       });
+      // Login users go to main page directly
       navigate('/');
     }
     

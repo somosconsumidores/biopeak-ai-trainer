@@ -33,6 +33,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        
+        // Store signup event for redirection
+        if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
+          // Check if this is a new user by checking if we have a flag set during signup
+          const isNewUser = localStorage.getItem('is_new_user') === 'true';
+          if (isNewUser) {
+            // Keep the flag for redirect handling
+          }
+        }
       }
     );
 
@@ -49,6 +58,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, displayName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
+    // Mark as new user before signup
+    localStorage.setItem('is_new_user', 'true');
+    
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -59,6 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     });
+    
+    // If signup failed, remove the flag
+    if (error) {
+      localStorage.removeItem('is_new_user');
+    }
+    
     return { error };
   };
 
