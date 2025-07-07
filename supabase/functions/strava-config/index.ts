@@ -38,10 +38,12 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Force preview URL for consistent OAuth configuration
-    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava'
+    // Use dynamic redirect URI based on request origin for flexibility
+    const requestOrigin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+    const redirectUri = requestOrigin ? `${requestOrigin}/strava` : 'https://preview--biopeak-ai-trainer.lovable.app/strava'
     
-    console.log('[strava-config] Using consistent preview URL for OAuth:', redirectUri)
+    console.log('[strava-config] Request origin:', requestOrigin)
+    console.log('[strava-config] Using redirect URI:', redirectUri)
     
     console.log('[strava-config] Final redirect URI:', redirectUri)
 

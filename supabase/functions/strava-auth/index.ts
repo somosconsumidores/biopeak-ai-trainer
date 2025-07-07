@@ -106,7 +106,9 @@ Deno.serve(async (req) => {
       codeLength: code?.length,
       codePreview: code ? `${code.substring(0, 8)}...` : null,
       redirect_uri,
-      userId: user.id
+      userId: user.id,
+      requestOrigin: req.headers.get('origin'),
+      requestReferer: req.headers.get('referer')
     })
     
     // Validate authorization code format (Strava codes are typically 40 characters)
@@ -118,7 +120,8 @@ Deno.serve(async (req) => {
       })
     }
     
-    if (typeof code !== 'string' || code.length < 20 || code.length > 80) {
+    // Relaxed validation - just check if code exists and is a string
+    if (typeof code !== 'string' || code.length < 10) {
       console.error('[strava-auth] Invalid authorization code format:', {
         type: typeof code,
         length: code?.length,
@@ -176,9 +179,11 @@ Deno.serve(async (req) => {
     console.log('[strava-auth] Token request body:', {
       client_id: clientId,
       client_secret: clientSecret ? 'configured' : 'missing',
-      code: code,
+      code_preview: `${code.substring(0, 8)}...`,
+      code_length: code.length,
       grant_type: 'authorization_code',
-      redirect_uri: redirect_uri
+      redirect_uri: redirect_uri,
+      full_code: code // Temporary full logging for debugging
     })
     
     console.log('[strava-auth] Making token request to Strava...')
