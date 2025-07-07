@@ -10,7 +10,9 @@ export const useStravaIntegration = () => {
   const { user, session } = useAuth();
   console.log('[useStravaIntegration] Auth context:', { hasUser: !!user, userId: user?.id, hasSession: !!session });
   
+  // Initialize all hooks in consistent order
   const { stravaConfig } = useStravaConfig();
+  const { isSyncing, activities, loadActivities, handleSync } = useStravaSync();
   const { 
     isConnected, 
     isConnecting, 
@@ -19,14 +21,13 @@ export const useStravaIntegration = () => {
     handleStravaConnect, 
     handleStravaCallback 
   } = useStravaAuth(stravaConfig);
-  
-  const { isSyncing, activities, loadActivities, handleSync } = useStravaSync();
 
   // Enhanced callback handler that includes sync functionality
   const handleStravaCallbackWithSync = (code: string) => {
     handleStravaCallback(code, () => handleSync(true));
   };
 
+  // Use callback handler after all other hooks are initialized
   useStravaCallbackHandler({ 
     handleStravaCallback: handleStravaCallbackWithSync, 
     setIsConnecting 
