@@ -233,12 +233,80 @@ Deno.serve(async (req) => {
     }
     
     console.log(`[strava-sync] Total activities fetched: ${activities.length}`)
+
+    // Helper function to add delay between API calls to respect rate limits
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+    
+    // Fetch detailed data for each activity to get heart rate and calories
+    console.log('[strava-sync] Starting detailed data fetch for activities...')
+    const detailedActivities: StravaActivity[] = []
+    let detailRequestCount = 0
+    
+    for (let i = 0; i < activities.length; i++) {
+      const activity = activities[i]
+      
+      // Check if we already have detailed data (heart rate or calories)
+      if (activity.average_heartrate || activity.calories) {
+        console.log(`[strava-sync] Activity ${activity.id} already has detailed data, skipping`)
+        detailedActivities.push(activity)
+        continue
+      }
+      
+      try {
+        console.log(`[strava-sync] Fetching detailed data for activity ${activity.id} (${i + 1}/${activities.length})`)
+        
+        // Add delay to respect rate limits (600 requests per 15 min = ~2.5 seconds between requests)
+        if (detailRequestCount > 0) {
+          await delay(3000) // 3 second delay between detailed requests
+        }
+        
+        const detailResponse = await fetch(
+          `https://www.strava.com/api/v3/activities/${activity.id}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          }
+        )
+        
+        detailRequestCount++
+        
+        if (detailResponse.ok) {
+          const detailedActivity = await detailResponse.json()
+          console.log(`[strava-sync] Got detailed data for activity ${activity.id} - HR: ${detailedActivity.average_heartrate}, Calories: ${detailedActivity.calories}`)
+          
+          // Merge detailed data with basic activity data
+          const enrichedActivity = {
+            ...activity,
+            average_heartrate: detailedActivity.average_heartrate || activity.average_heartrate,
+            max_heartrate: detailedActivity.max_heartrate || activity.max_heartrate,
+            calories: detailedActivity.calories || activity.calories,
+          }
+          
+          detailedActivities.push(enrichedActivity)
+        } else {
+          console.warn(`[strava-sync] Failed to fetch detailed data for activity ${activity.id}, status: ${detailResponse.status}`)
+          detailedActivities.push(activity) // Keep original data
+        }
+        
+        // Log progress every 10 activities
+        if ((i + 1) % 10 === 0) {
+          console.log(`[strava-sync] Processed ${i + 1}/${activities.length} activities for detailed data`)
+        }
+        
+      } catch (error) {
+        console.error(`[strava-sync] Error fetching detailed data for activity ${activity.id}:`, error)
+        detailedActivities.push(activity) // Keep original data
+      }
+    }
+    
+    console.log(`[strava-sync] Completed detailed data fetch. Made ${detailRequestCount} detail requests.`)
     let syncedCount = 0
 
     // Store activities in database
     console.log('[strava-sync] Starting to store activities in database...')
     
-    for (const activity of activities) {
+    for (const activity of detailedActivities) {
       console.log(`[strava-sync] Processing activity ${activity.id}: ${activity.name}`)
       
       // First attempt with ANON_KEY
@@ -300,25 +368,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[strava-sync] Successfully synced ${syncedCount}/${activities.length} activities for user:`, user.id)
+    console.log(`[strava-sync] Successfully synced ${syncedCount}/${detailedActivities.length} activities for user:`, user.id)
     
     // Log detailed sync results
     console.log('[strava-sync] Sync summary:', {
       userId: user.id,
-      totalActivitiesFromStrava: activities.length,
+      totalActivitiesFromStrava: detailedActivities.length,
       activitiesSyncedToDatabase: syncedCount,
       syncSuccess: syncedCount > 0,
-      usingServiceRole: usingServiceRole
+      usingServiceRole: usingServiceRole,
+      detailRequestsMade: detailRequestCount
     })
 
     return new Response(JSON.stringify({ 
       success: true,
       synced: syncedCount,
-      total: activities.length,
+      total: detailedActivities.length,
       debug: {
         userId: user.id,
         usingServiceRole: usingServiceRole,
-        activitiesReceived: activities.length
+        activitiesReceived: detailedActivities.length,
+        detailRequestsMade: detailRequestCount
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
