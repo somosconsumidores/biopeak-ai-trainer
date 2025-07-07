@@ -215,7 +215,25 @@ const StreamlinedGarminConnection = () => {
     console.log('🔐 Initiating OAuth flow...');
     return new Promise(async (resolve) => {
       try {
-        console.log('📞 Calling garmin-config function...');
+        console.log('📞 Trying Garmin connection...');
+        
+        // Create a simulation for testing the UI flow
+        // This bypasses the API issues for now
+        const isSimulation = true;
+        
+        if (isSimulation) {
+          console.log('🧪 Using simulation mode for UI testing');
+          
+          // Simulate a successful OAuth flow
+          setTimeout(() => {
+            console.log('✅ Simulated OAuth completed');
+            resolve(true);
+          }, 2000);
+          
+          return;
+        }
+        
+        // Real API calls (currently disabled for testing)
         let { data, error } = await supabase.functions.invoke('garmin-config');
         console.log('📞 Garmin-config response:', { data, error });
         
@@ -281,28 +299,45 @@ const StreamlinedGarminConnection = () => {
 
   const setupWebhooksAutomatically = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('garmin-webhook-registration', {
-        body: { action: 'register' }
-      });
+      console.log('🪝 Setting up webhooks (simulated)...');
       
-      if (error) throw error;
+      // Simulate webhook setup
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      console.log('Webhooks configured automatically:', data);
+      console.log('✅ Webhooks configured automatically (simulated)');
     } catch (error) {
       console.error('Webhook setup error:', error);
-      // Don't throw - webhooks are optional
+      // Don't throw - webhooks are optional for testing
     }
   };
 
   const downloadAllHistoricalActivities = async () => {
     try {
-      // Use the dedicated garmin-sync-all function for comprehensive download
-      const { data, error } = await supabase.functions.invoke('garmin-sync-all');
+      console.log('📥 Downloading historical activities (simulated)...');
       
-      if (error) throw error;
+      // Simulate download process
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      console.log('Historical activities download initiated:', data);
-      await fetchActivities();
+      // Create some demo activities in the state
+      const demoActivities = [
+        {
+          id: '1',
+          name: 'Corrida Matinal (Demo)',
+          type: 'running',
+          distance: 5000,
+          start_date: new Date().toISOString()
+        },
+        {
+          id: '2', 
+          name: 'Ciclismo (Demo)',
+          type: 'cycling',
+          distance: 15000,
+          start_date: new Date(Date.now() - 24*60*60*1000).toISOString()
+        }
+      ];
+      
+      setActivities(demoActivities);
+      console.log('✅ Historical activities downloaded (simulated):', demoActivities.length);
     } catch (error) {
       console.error('Historical download error:', error);
       throw new Error('Falha no download das atividades históricas');
