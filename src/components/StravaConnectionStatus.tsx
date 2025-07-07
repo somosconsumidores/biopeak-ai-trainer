@@ -51,6 +51,7 @@ const StravaConnectionStatus = ({
               onClick={() => {
                 console.log('[StravaConnectionStatus] Button clicked - calling onConnect');
                 console.log('[StravaConnectionStatus] Button state:', { isConnecting, stravaConfig });
+                console.log('[StravaConnectionStatus] About to redirect to Strava auth...');
                 onConnect();
               }}
               disabled={isConnecting || !stravaConfig}

@@ -28,21 +28,27 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
   };
 
   const handleStravaConnect = () => {
+    console.log('[useStravaAuth] ===== STARTING STRAVA CONNECTION =====');
     console.log('[useStravaAuth] handleStravaConnect called - checking config:', {
       hasConfig: !!stravaConfig,
-      config: stravaConfig
+      config: stravaConfig,
+      currentUrl: window.location.href,
+      userAgent: navigator.userAgent
     });
     
     // Force clean any previous connection state and URL parameters
     localStorage.removeItem('strava_connecting');
     localStorage.removeItem('strava_state');
     localStorage.removeItem('strava_connect_time');
+    localStorage.removeItem('strava_processed_code');
     
     // Clean URL of any existing OAuth parameters to prevent code reuse
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('code');
     currentUrl.searchParams.delete('state');
     currentUrl.searchParams.delete('scope');
+    currentUrl.searchParams.delete('error');
+    currentUrl.searchParams.delete('error_description');
     window.history.replaceState({}, document.title, currentUrl.pathname);
     
     console.log('[useStravaAuth] Cleaned previous connection state and URL params');
@@ -62,6 +68,8 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
 
     const scope = 'read,activity:read_all';
     const state = Math.random().toString(36).substring(2, 15);
+    
+    // IMPORTANTE: Usar approval_prompt=force para garantir nova autorização
     const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(stravaConfig.redirectUri)}&approval_prompt=force&scope=${scope}&state=${state}`;
     
     console.log('[useStravaAuth] Generated auth URL details:', {
@@ -70,11 +78,11 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
       redirectUri: stravaConfig.redirectUri,
       encodedRedirectUri: encodeURIComponent(stravaConfig.redirectUri),
       scope,
-      state
+      state,
+      urlLength: authUrl.length
     });
     
-    console.log('[useStravaAuth] Generated auth URL:', authUrl);
-    console.log('[useStravaAuth] About to set localStorage items');
+    console.log('[useStravaAuth] Final auth URL:', authUrl);
     
     // Store connection state and timestamp
     localStorage.setItem('strava_connecting', 'true');
@@ -88,15 +96,21 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
       state: localStorage.getItem('strava_state')
     });
     
+    // Show a toast to indicate we're redirecting
+    toast.info('Redirecionando para o Strava...');
+    
     // Add a small delay to ensure localStorage is set, then redirect
     setTimeout(() => {
-      console.log('[useStravaAuth] Executing redirect to Strava...');
+      console.log('[useStravaAuth] ===== EXECUTING REDIRECT TO STRAVA =====');
       console.log('[useStravaAuth] Final localStorage check before redirect:', {
         connecting: localStorage.getItem('strava_connecting'),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        redirectUrl: authUrl
       });
-      window.location.href = authUrl;
-    }, 200);
+      
+      // Use window.location.assign for better compatibility
+      window.location.assign(authUrl);
+    }, 500); // Increased delay to ensure everything is ready
   };
 
   const handleStravaCallback = async (code: string, onSyncSuccess?: () => void) => {
