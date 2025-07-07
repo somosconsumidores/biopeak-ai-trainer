@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, Settings, User, ChartBar } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import ThemeToggle from "@/components/ui/theme-toggle";
 
 interface BioPeakLandingProps {
@@ -212,12 +212,12 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
           </div>
           
           <div className="flex flex-col md:flex-row items-center gap-4">
-            <a 
-              href="/privacy-policy" 
+            <Link 
+              to="/privacy-policy" 
               className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Política de Privacidade
-            </a>
+            </Link>
             <p className="text-muted-foreground text-xs sm:text-sm text-center">
               © 2024 BioPeak. Transformando dados em performance.
             </p>
