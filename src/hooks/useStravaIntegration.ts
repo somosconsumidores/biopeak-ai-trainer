@@ -234,9 +234,22 @@ export const useStravaIntegration = () => {
     const code = urlParams.get('code');
     const isConnecting = localStorage.getItem('strava_connecting') === 'true';
     
+    console.log('[useStravaIntegration] Checking for OAuth callback:', {
+      currentUrl: window.location.href,
+      hasCode: !!code,
+      code: code ? 'present' : 'missing',
+      isConnecting,
+      localStorage: localStorage.getItem('strava_connecting')
+    });
+    
     if (code && isConnecting) {
+      console.log('[useStravaIntegration] Processing Strava OAuth callback...');
       handleStravaCallback(code);
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (code && !isConnecting) {
+      console.warn('[useStravaIntegration] Code found but not in connecting state');
+    } else if (!code && isConnecting) {
+      console.warn('[useStravaIntegration] In connecting state but no code found');
     }
   }, []);
 
