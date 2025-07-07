@@ -210,9 +210,18 @@ const BioPeakLanding = ({ onEnterApp }: BioPeakLandingProps) => {
             <img src="/lovable-uploads/6dd7da64-0e29-4226-8bb4-99185306e197.png" alt="BioPeak" className="h-6 sm:h-8 w-auto" />
             <span className="text-base sm:text-lg font-bold text-foreground">BioPeak</span>
           </div>
-          <p className="text-muted-foreground text-xs sm:text-sm text-center">
-            © 2024 BioPeak. Transformando dados em performance.
-          </p>
+          
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <a 
+              href="/privacy-policy" 
+              className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Política de Privacidade
+            </a>
+            <p className="text-muted-foreground text-xs sm:text-sm text-center">
+              © 2024 BioPeak. Transformando dados em performance.
+            </p>
+          </div>
         </div>
       </footer>
     </div>
