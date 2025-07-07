@@ -181,7 +181,14 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       authUrl,
       requestToken: oauthToken,
-      requestTokenSecret: oauthTokenSecret
+      requestTokenSecret: oauthTokenSecret,
+      webhookUrl: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook',
+      webhookEndpoints: {
+        activities: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook',
+        daily_summary: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook',
+        sleep: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook'
+      },
+      note: 'Configure these webhook endpoints in your Garmin Developer Console'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

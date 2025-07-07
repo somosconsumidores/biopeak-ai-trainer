@@ -15,6 +15,8 @@ const GarminIntegration = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [webhookStatus, setWebhookStatus] = useState([]);
+  const [showWebhookUrls, setShowWebhookUrls] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -33,6 +35,7 @@ const GarminIntegration = () => {
       if (data && !error) {
         setIsConnected(true);
         await fetchActivities();
+        await checkWebhookStatus();
       }
     } catch (error) {
       console.log('No Garmin connection found');
@@ -103,6 +106,44 @@ const GarminIntegration = () => {
       setActivities(data || []);
     } catch (error) {
       console.error('Error fetching activities:', error);
+    }
+  };
+
+  const checkWebhookStatus = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('garmin-webhook-registration', {
+        body: { action: 'status' }
+      });
+      
+      if (error) throw error;
+      
+      setWebhookStatus(data.webhooks || []);
+    } catch (error) {
+      console.error('Error checking webhook status:', error);
+    }
+  };
+
+  const registerWebhooks = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('garmin-webhook-registration', {
+        body: { action: 'register' }
+      });
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Webhooks registrados",
+        description: "Os webhooks foram configurados automaticamente. A sincronização deve funcionar agora.",
+      });
+      
+      await checkWebhookStatus();
+    } catch (error) {
+      console.error('Error registering webhooks:', error);
+      toast({
+        title: "Erro ao registrar webhooks",
+        description: "Não foi possível registrar os webhooks automaticamente. Configure manualmente no Garmin Developer Console.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -187,9 +228,24 @@ const GarminIntegration = () => {
                 onClick={syncActivities}
                 disabled={isSyncing}
                 variant="glass"
+                size="sm"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Sincronizando...' : 'Sincronização Manual'}
+                {isSyncing ? 'Sincronizando...' : 'Sync Manual'}
+              </Button>
+              <Button 
+                onClick={registerWebhooks}
+                variant="outline"
+                size="sm"
+              >
+                Configurar Webhooks
+              </Button>
+              <Button 
+                onClick={() => setShowWebhookUrls(!showWebhookUrls)}
+                variant="ghost"
+                size="sm"
+              >
+                URLs de Webhook
               </Button>
               <Button 
                 onClick={disconnectGarmin}
@@ -203,14 +259,38 @@ const GarminIntegration = () => {
         </div>
 
         {isConnected && (
-          <div className="mt-4 p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
-            <div className="flex items-center space-x-2">
-              <Webhook className="w-4 h-4 text-blue-400" />
-              <span className="text-sm text-blue-400 font-medium">Webhook Ativo</span>
+          <div className="mt-4 space-y-3">
+            <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+              <div className="flex items-center space-x-2">
+                <Webhook className="w-4 h-4 text-blue-400" />
+                <span className="text-sm text-blue-400 font-medium">
+                  Status Webhook: {webhookStatus.length > 0 ? 'Configurado' : 'Necessário'}
+                </span>
+              </div>
+              <p className="text-xs text-blue-300 mt-1">
+                {webhookStatus.length > 0 
+                  ? 'Os dados são sincronizados automaticamente quando você sincroniza seu dispositivo Garmin'
+                  : 'Configure os webhooks para sincronização automática de atividades'
+                }
+              </p>
+              {webhookStatus.length > 0 && (
+                <div className="mt-2 text-xs text-blue-300">
+                  Webhooks ativos: {webhookStatus.map(w => w.summary_type).join(', ')}
+                </div>
+              )}
             </div>
-            <p className="text-xs text-blue-300 mt-1">
-              Os dados são sincronizados automaticamente quando você sincroniza seu dispositivo Garmin
-            </p>
+
+            {showWebhookUrls && (
+              <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
+                <h4 className="text-sm font-medium text-yellow-400 mb-2">URLs para configurar no Garmin Developer Console:</h4>
+                <div className="space-y-1 text-xs text-yellow-300 font-mono">
+                  <div>https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook</div>
+                </div>
+                <p className="text-xs text-yellow-300 mt-2">
+                  Configure esta URL para os tipos: Activities, Daily Summary, Sleep
+                </p>
+              </div>
+            )}
           </div>
         )}
       </Card>

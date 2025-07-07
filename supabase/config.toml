@@ -26,3 +26,6 @@ verify_jwt = true
 
 [functions.garmin-webhook]
 verify_jwt = false
+
+[functions.garmin-webhook-registration]
+verify_jwt = true
