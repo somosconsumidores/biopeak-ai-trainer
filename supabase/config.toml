@@ -14,3 +14,15 @@ verify_jwt = true
 
 [functions.process-training-sessions]
 verify_jwt = true
+
+[functions.garmin-config]
+verify_jwt = false
+
+[functions.garmin-auth]
+verify_jwt = true
+
+[functions.garmin-sync]
+verify_jwt = true
+
+[functions.garmin-webhook]
+verify_jwt = false

@@ -48,11 +48,23 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const clientId = Deno.env.get('GARMIN_CLIENT_ID')!;
-    const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET')!;
+    const clientId = Deno.env.get('GARMIN_CLIENT_ID');
+    const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET');
+
+    console.log('Environment check:', {
+      supabaseUrl: !!supabaseUrl,
+      supabaseKey: !!supabaseKey,
+      clientId: !!clientId,
+      clientSecret: !!clientSecret
+    });
 
     if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
-      throw new Error('Missing required environment variables');
+      const missing = [];
+      if (!supabaseUrl) missing.push('SUPABASE_URL');
+      if (!supabaseKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+      if (!clientId) missing.push('GARMIN_CLIENT_ID');
+      if (!clientSecret) missing.push('GARMIN_CLIENT_SECRET');
+      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -72,15 +84,25 @@ serve(async (req) => {
       throw new Error('Invalid token');
     }
 
-    const { oauth_token, oauth_verifier } = await req.json();
-
-    if (!oauth_token || !oauth_verifier) {
-      throw new Error('Missing OAuth parameters');
+    let body;
+    try {
+      body = await req.json();
+    } catch (error) {
+      console.error('Failed to parse request body:', error);
+      throw new Error('Invalid request body - must be valid JSON');
     }
 
-    console.log('Processing Garmin OAuth with token:', oauth_token);
+    const { oauth_token, oauth_verifier } = body;
+    console.log('Received OAuth parameters:', { oauth_token: !!oauth_token, oauth_verifier: !!oauth_verifier });
+
+    if (!oauth_token || !oauth_verifier) {
+      throw new Error('Missing OAuth parameters: oauth_token and oauth_verifier are required');
+    }
+
+    console.log('Processing Garmin OAuth with token:', oauth_token.substring(0, 10) + '...');
 
     // Get stored request token secret from temp table
+    console.log('Looking up request token in oauth_temp_tokens...');
     const { data: requestTokenData, error: tokenError } = await supabase
       .from('oauth_temp_tokens')
       .select('*')
@@ -88,8 +110,22 @@ serve(async (req) => {
       .eq('provider', 'garmin')
       .single();
 
+    console.log('Request token lookup result:', { 
+      found: !!requestTokenData, 
+      error: tokenError?.message,
+      tokenCount: requestTokenData ? 1 : 0
+    });
+
     if (tokenError || !requestTokenData) {
       console.error('Request token lookup error:', tokenError);
+      
+      // Check if there are any temp tokens for debugging
+      const { data: allTokens } = await supabase
+        .from('oauth_temp_tokens')
+        .select('oauth_token, provider, created_at, expires_at')
+        .eq('provider', 'garmin');
+      
+      console.log('Available temp tokens:', allTokens);
       throw new Error('Request token not found or expired. Please start the OAuth flow again.');
     }
 
@@ -109,10 +145,19 @@ serve(async (req) => {
     };
 
     // Generate signature for access token
-    const accessTokenSignature = await generateSignature('POST', accessTokenUrl, accessTokenParams, clientSecret, requestTokenSecret);
-    accessTokenParams['oauth_signature'] = accessTokenSignature;
+    console.log('Generating OAuth signature for access token...');
+    try {
+      const accessTokenSignature = await generateSignature('POST', accessTokenUrl, accessTokenParams, clientSecret, requestTokenSecret);
+      accessTokenParams['oauth_signature'] = accessTokenSignature;
+      console.log('OAuth signature generated successfully');
+    } catch (signatureError) {
+      console.error('Failed to generate OAuth signature:', signatureError);
+      throw new Error(`OAuth signature generation failed: ${signatureError.message}`);
+    }
 
-    console.log('Making access token request to Garmin...');
+    console.log('Making access token request to Garmin API...');
+    console.log('Request URL:', accessTokenUrl);
+    console.log('Request params (without signature):', { ...accessTokenParams, oauth_signature: '[REDACTED]' });
 
     // Make access token request
     const accessTokenResponse = await fetch(accessTokenUrl, {
@@ -123,10 +168,18 @@ serve(async (req) => {
       }
     });
 
+    console.log('Access token response status:', accessTokenResponse.status);
+    console.log('Access token response headers:', Object.fromEntries(accessTokenResponse.headers.entries()));
+
     if (!accessTokenResponse.ok) {
       const errorText = await accessTokenResponse.text();
-      console.error('Access token error:', errorText);
-      throw new Error(`Failed to get access token: ${accessTokenResponse.status} - ${errorText}`);
+      console.error('Access token error response:', errorText);
+      console.error('Full response details:', {
+        status: accessTokenResponse.status,
+        statusText: accessTokenResponse.statusText,
+        headers: Object.fromEntries(accessTokenResponse.headers.entries())
+      });
+      throw new Error(`Failed to get access token from Garmin: ${accessTokenResponse.status} ${accessTokenResponse.statusText} - ${errorText}`);
     }
 
     const accessTokenData = await accessTokenResponse.text();
@@ -138,22 +191,31 @@ serve(async (req) => {
     const finalTokenSecret = accessTokenParts.get('oauth_token_secret');
 
     if (!finalAccessToken || !finalTokenSecret) {
-      throw new Error('Invalid access token response');
+      console.error('Missing tokens in response:', { finalAccessToken: !!finalAccessToken, finalTokenSecret: !!finalTokenSecret });
+      throw new Error('Invalid access token response - missing required tokens');
     }
 
+    console.log('Successfully parsed access tokens');
+
     // Delete temporary request token
-    await supabase
+    console.log('Cleaning up temporary request token...');
+    const { error: deleteError } = await supabase
       .from('oauth_temp_tokens')
       .delete()
       .eq('oauth_token', oauth_token);
 
+    if (deleteError) {
+      console.warn('Failed to delete temporary token:', deleteError);
+    }
+
     // Store final tokens
+    console.log('Storing final tokens in garmin_tokens table...');
     const { error: insertError } = await supabase
       .from('garmin_tokens')
       .upsert({
         user_id: user.id,
         access_token: finalAccessToken,
-        token_secret: finalTokenSecret, // Fixed: using correct field name
+        token_secret: finalTokenSecret,
         consumer_key: clientId,
         oauth_verifier: oauth_verifier,
         expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year

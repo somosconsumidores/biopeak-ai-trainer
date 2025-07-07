@@ -51,8 +51,14 @@ serve(async (req) => {
     const clientId = Deno.env.get('GARMIN_CLIENT_ID');
     const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET');
     
+    console.log('Environment check - Garmin credentials:', {
+      clientId: !!clientId,
+      clientSecret: !!clientSecret
+    });
+    
     if (!clientId || !clientSecret) {
-      throw new Error('Garmin client credentials not configured');
+      console.error('Missing Garmin credentials');
+      throw new Error('Garmin client credentials not configured - please check GARMIN_CLIENT_ID and GARMIN_CLIENT_SECRET');
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -91,6 +97,10 @@ serve(async (req) => {
     }
 
     // Make request token request
+    console.log('Making request token request to Garmin...');
+    console.log('Request URL:', requestTokenUrl);
+    console.log('OAuth params (without signature):', { ...requestTokenParams, oauth_signature: '[REDACTED]' });
+    
     const requestTokenResponse = await fetch(requestTokenUrl, {
       method: 'POST',
       headers: {
@@ -106,13 +116,19 @@ serve(async (req) => {
     if (!requestTokenResponse.ok) {
       const errorText = await requestTokenResponse.text();
       console.error('Request token error response:', errorText);
+      console.error('Full response details:', {
+        status: requestTokenResponse.status,
+        statusText: requestTokenResponse.statusText,
+        headers: Object.fromEntries(requestTokenResponse.headers.entries())
+      });
       
       // If it's a 401, it's likely a signature issue
       if (requestTokenResponse.status === 401) {
-        throw new Error(`OAuth signature verification failed. Check your client credentials and signature generation.`);
+        console.error('OAuth signature verification failed - check credentials and signature generation');
+        throw new Error(`OAuth signature verification failed. Status: ${requestTokenResponse.status}. Please verify GARMIN_CLIENT_ID and GARMIN_CLIENT_SECRET are correct.`);
       }
       
-      throw new Error(`Failed to get request token: ${requestTokenResponse.status} - ${errorText}`);
+      throw new Error(`Failed to get request token from Garmin: ${requestTokenResponse.status} ${requestTokenResponse.statusText} - ${errorText}`);
     }
 
     const requestTokenData = await requestTokenResponse.text();
@@ -124,10 +140,15 @@ serve(async (req) => {
     const oauthTokenSecret = requestTokenParts.get('oauth_token_secret');
 
     if (!oauthToken || !oauthTokenSecret) {
-      throw new Error('Invalid request token response');
+      console.error('Missing tokens in response:', { oauthToken: !!oauthToken, oauthTokenSecret: !!oauthTokenSecret });
+      console.error('Full response data:', requestTokenData);
+      throw new Error('Invalid request token response - missing oauth_token or oauth_token_secret');
     }
 
+    console.log('Successfully parsed request tokens');
+
     // Store request token temporarily in oauth_temp_tokens table
+    console.log('Storing temporary request token...');
     const { error: insertError } = await supabase
       .from('oauth_temp_tokens')
       .insert({
