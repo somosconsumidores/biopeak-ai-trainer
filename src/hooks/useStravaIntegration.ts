@@ -23,13 +23,13 @@ export const useStravaIntegration = () => {
     
     let redirectUri;
     if (isProduction) {
-      redirectUri = 'https://biopeak-ai.com/';
+      redirectUri = 'https://biopeak-ai.com/strava';
       console.log('[useStravaIntegration] Using production config');
     } else if (isPreview) {
-      redirectUri = `${origin}/`;
+      redirectUri = `${origin}/strava`;
       console.log('[useStravaIntegration] Using preview config:', redirectUri);
     } else {
-      redirectUri = `${origin}/`;
+      redirectUri = `${origin}/strava`;
       console.log('[useStravaIntegration] Using local/development config:', redirectUri);
     }
     

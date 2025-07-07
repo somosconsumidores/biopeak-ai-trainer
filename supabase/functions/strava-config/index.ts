@@ -50,17 +50,17 @@ Deno.serve(async (req) => {
       userAgent: req.headers.get('user-agent')
     })
     
-    let redirectUri = 'https://biopeak-ai.com/' // Default to production
+    let redirectUri = 'https://biopeak-ai.com/strava' // Default to production
     
     // Environment detection logic
     if (forwardedHost && forwardedHost.includes('biopeak-ai.com')) {
-      redirectUri = 'https://biopeak-ai.com/'
+      redirectUri = 'https://biopeak-ai.com/strava'
       console.log('[strava-config] Detected production environment via forwarded host')
     } else if (host && host.includes('biopeak-ai.com')) {
-      redirectUri = 'https://biopeak-ai.com/'
+      redirectUri = 'https://biopeak-ai.com/strava'
       console.log('[strava-config] Detected production environment via host')
     } else if (origin && origin.includes('biopeak-ai.com')) {
-      redirectUri = 'https://biopeak-ai.com/'
+      redirectUri = 'https://biopeak-ai.com/strava'
       console.log('[strava-config] Detected production environment via origin')
     } else if (origin) {
       // For preview, local development or other environments
@@ -69,13 +69,13 @@ Deno.serve(async (req) => {
         const hostname = url.hostname
         
         if (hostname === 'localhost' || hostname.includes('127.0.0.1')) {
-          redirectUri = `${url.origin}/`
+          redirectUri = `${url.origin}/strava`
           console.log('[strava-config] Using local development environment:', redirectUri)
         } else if (hostname.includes('lovable.app') || hostname.includes('lovableproject.com')) {
-          redirectUri = `${url.origin}/`
+          redirectUri = `${url.origin}/strava`
           console.log('[strava-config] Using preview environment:', redirectUri)
         } else {
-          redirectUri = `${url.origin}/`
+          redirectUri = `${url.origin}/strava`
           console.log('[strava-config] Using other environment:', redirectUri)
         }
       } catch (e) {

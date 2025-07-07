@@ -19,6 +19,14 @@ const Index = () => {
   // Redirect authenticated users - handle new user flow properly
   useEffect(() => {
     const currentPath = window.location.pathname;
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasStravaCode = urlParams.get('code') && localStorage.getItem('strava_connecting') === 'true';
+    
+    // Don't redirect if we're processing a Strava OAuth callback
+    if (hasStravaCode) {
+      console.log('[Index] Strava OAuth callback detected, skipping redirects');
+      return;
+    }
     
     if (user && !loading) {
       const isNewUser = localStorage.getItem('is_new_user') === 'true';
