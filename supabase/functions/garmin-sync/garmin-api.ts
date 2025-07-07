@@ -42,18 +42,37 @@ export async function makeGarminApiCall(url: string, accessToken: string, tokenS
   
   console.log('Authorization header:', authHeader);
 
-  // Make API call
+  // Enhanced headers based on research
+  const headers = {
+    'Authorization': authHeader,
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'User-Agent': 'Mozilla/5.0 (compatible; GarminConnect/1.0; +https://connect.garmin.com)',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Requested-With': 'XMLHttpRequest'
+  };
+
+  console.log('Request headers:', headers);
+
+  // Make API call with enhanced error handling
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Authorization': authHeader,
-      'Accept': 'application/json',
-      'User-Agent': 'GarminConnectApp'
-    }
+    headers
   });
 
   console.log('Response status:', response.status);
+  console.log('Response status text:', response.statusText);
   console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+  
+  // Log response body preview for debugging (first 500 chars)
+  if (!response.ok) {
+    const responseClone = response.clone();
+    const errorPreview = await responseClone.text();
+    console.log('Error response preview:', errorPreview.substring(0, 500) + (errorPreview.length > 500 ? '...' : ''));
+  }
 
   return response;
 }
@@ -63,12 +82,30 @@ export function getGarminApiEndpoints() {
   const today = new Date().toISOString().split('T')[0];
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
+  // Prioritized list of endpoints based on research
   return [
+    // Activity Service endpoints (most likely to work with OAuth 1.0)
+    `${baseUrl}/activity-service/activity/activities`,
+    `${baseUrl}/activity-service/activities`,
+    
+    // Health API endpoints
+    `${baseUrl}/health-api/v1/activities?startDate=${thirtyDaysAgo}&endDate=${today}`,
+    `${baseUrl}/health-api/v1/activities`,
+    
+    // Wellness API endpoints (backup)
     `${baseUrl}/wellness-api/rest/activities?fromDate=${thirtyDaysAgo}&toDate=${today}`,
     `${baseUrl}/wellness-api/rest/activities`,
-    `${baseUrl}/wellness-api/rest/dailies?fromDate=${thirtyDaysAgo}&toDate=${today}`,
-    `${baseUrl}/activitylist-service/activities/search/activities`,
-    `${baseUrl}/modern/proxy/activitylist-service/activities/search/activities`
+    
+    // Activity list service endpoints  
+    `${baseUrl}/activitylist-service/activities/search/activities?start=0&limit=20`,
+    `${baseUrl}/activitylist-service/activities`,
+    
+    // User-specific activity endpoints
+    `${baseUrl}/userprofile-service/userprofile/personal-information/activities`,
+    
+    // Modern proxy endpoints (last resort)
+    `${baseUrl}/modern/proxy/activitylist-service/activities/search/activities`,
+    `${baseUrl}/modern/proxy/activity-service/activities`
   ];
 }
 
@@ -92,25 +129,56 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
       console.log(`Response headers:`, Object.fromEntries(activitiesResponse.headers.entries()));
       
       if (activitiesResponse.ok) {
-        activitiesData = await activitiesResponse.json();
-        console.log(`Success! Fetched data from ${endpoint}:`, JSON.stringify(activitiesData, null, 2));
+        const responseData = await activitiesResponse.json();
+        console.log(`✅ SUCCESS! Endpoint working: ${endpoint}`);
+        console.log(`Response data structure:`, JSON.stringify(responseData, null, 2));
+        
+        // Validate response structure
+        if (Array.isArray(responseData)) {
+          activitiesData = responseData;
+          console.log(`Found ${responseData.length} activities`);
+        } else if (responseData && typeof responseData === 'object') {
+          // Handle different response formats
+          activitiesData = responseData.activities || responseData.activityList || responseData.data || [responseData];
+          console.log(`Extracted ${activitiesData.length} activities from response object`);
+        } else {
+          console.warn('Unexpected response format, treating as single activity');
+          activitiesData = [responseData];
+        }
         break;
       } else {
         const errorText = await activitiesResponse.text();
-        console.error(`API error for ${endpoint}:`, errorText);
+        console.error(`❌ FAILED: ${endpoint} - Status: ${activitiesResponse.status}`);
+        console.error('Error response body:', errorText);
         
-        // Enhanced error detection
+        // Enhanced error categorization
         if (activitiesResponse.status === 401) {
-          console.error('Authentication failed - checking OAuth tokens and signature');
-          lastError = `Authentication failed (401) - OAuth signature or tokens invalid: ${errorText}`;
+          console.error('🔐 Authentication Error: Invalid OAuth signature or expired tokens');
+          lastError = `Authentication failed (401): ${errorText.substring(0, 200)}...`;
+          
+          // For 401, we might want to try fewer endpoints as it's likely a global auth issue
+          if (apiEndpoints.indexOf(endpoint) > 2) {
+            console.log('Stopping early due to repeated auth failures');
+            break;
+          }
         } else if (activitiesResponse.status === 403) {
-          console.error('Access forbidden - API may not be enabled for this endpoint');
-          lastError = `Access forbidden (403) - API endpoint may not be enabled: ${errorText}`;
+          console.error('🚫 Authorization Error: Access denied to this resource');
+          lastError = `Access forbidden (403): ${errorText.substring(0, 200)}...`;
         } else if (activitiesResponse.status === 404) {
-          console.error('Endpoint not found - checking if URL is correct');
-          lastError = `Endpoint not found (404) - URL may be incorrect: ${errorText}`;
+          console.error('🔍 Not Found: Endpoint does not exist');
+          lastError = `Endpoint not found (404): ${errorText.substring(0, 200)}...`;
+        } else if (activitiesResponse.status === 429) {
+          console.error('⏳ Rate Limited: Too many requests');
+          lastError = `Rate limited (429): ${errorText.substring(0, 200)}...`;
+          
+          // For rate limits, we should stop trying
+          break;
+        } else if (activitiesResponse.status >= 500) {
+          console.error('🚨 Server Error: Garmin service issue');
+          lastError = `Server error (${activitiesResponse.status}): ${errorText.substring(0, 200)}...`;
         } else {
-          lastError = `${activitiesResponse.status} - ${errorText}`;
+          console.error(`❓ Unknown Error: ${activitiesResponse.status}`);
+          lastError = `HTTP ${activitiesResponse.status}: ${errorText.substring(0, 200)}...`;
         }
       }
     } catch (error) {

@@ -72,7 +72,7 @@ serve(async (req) => {
       throw new Error('No Garmin connection found. Please connect your Garmin account first.');
     }
 
-    // Validate token structure
+    // Enhanced token validation
     if (!tokenData.access_token || !tokenData.token_secret) {
       console.error('Invalid token structure:', {
         hasAccessToken: !!tokenData.access_token,
@@ -81,12 +81,27 @@ serve(async (req) => {
       throw new Error('Invalid Garmin tokens. Please reconnect your Garmin account.');
     }
 
+    // Check for demo/UUID tokens
+    if (tokenData.access_token.includes('-') && tokenData.access_token.length === 36) {
+      console.error('Demo tokens detected - user needs to complete OAuth flow');
+      throw new Error('Demo tokens detected. Please complete the Garmin Connect authorization process.');
+    }
+
     // Check if tokens are expired
     const expiresAt = new Date(tokenData.expires_at);
     const now = new Date();
     if (expiresAt <= now) {
       console.error('Tokens expired:', { expiresAt, now });
       throw new Error('Garmin tokens have expired. Please reconnect your Garmin account.');
+    }
+
+    // Validate OAuth 1.0 token format (should not look like OAuth 2.0)
+    if (tokenData.access_token.length < 10 || tokenData.token_secret.length < 10) {
+      console.error('Token format appears invalid:', {
+        accessTokenLength: tokenData.access_token.length,
+        tokenSecretLength: tokenData.token_secret.length
+      });
+      throw new Error('Invalid token format. Please reconnect your Garmin account.');
     }
 
     console.log('Garmin tokens validated successfully');
