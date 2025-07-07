@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useTrainingSessions, TrainingSession } from './useTrainingSessions';
+import { useTrainingSessions, TrainingSession } from '@/hooks/useTrainingSessions';
 
 interface DashboardMetrics {
   performancePeak: number;
@@ -22,6 +22,12 @@ interface DashboardMetrics {
 
 export function useDashboardMetrics(): DashboardMetrics & { loading: boolean } {
   const { sessions, loading } = useTrainingSessions();
+
+  console.log('[useDashboardMetrics] Sessions data:', { 
+    sessionsCount: sessions.length, 
+    loading, 
+    sessions: sessions.slice(0, 3) 
+  });
 
   const metrics = useMemo(() => {
     if (!sessions.length) {

@@ -20,6 +20,14 @@ const Dashboard = () => {
     loading
   } = useDashboardMetrics();
 
+  console.log('[Dashboard] Dashboard metrics:', {
+    performancePeak,
+    vo2Max,
+    totalSessions,
+    loading,
+    hasRecentSessions: recentSessions.length
+  });
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -237,7 +245,14 @@ const Dashboard = () => {
             ))
           ) : (
             <Card className="glass p-6 col-span-full text-center">
-              <p className="text-muted-foreground">Nenhuma sessão encontrada. Conecte-se ao Strava para sincronizar suas atividades.</p>
+              <p className="text-muted-foreground mb-4">
+                Nenhuma sessão de treino encontrada. Para ver suas métricas:
+              </p>
+              <div className="space-y-2 text-sm text-muted-foreground mb-4">
+                <p>1. Conecte-se ao Strava</p>
+                <p>2. Sincronize suas atividades</p>
+                <p>3. Processe os dados de treino</p>
+              </div>
               <Button 
                 variant="glass" 
                 className="mt-4"
