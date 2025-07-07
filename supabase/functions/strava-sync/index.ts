@@ -248,11 +248,25 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[strava-sync] Successfully synced ${syncedCount}/${activities.length} activities for user:`, user.id)
+    
+    // Log detailed sync results
+    console.log('[strava-sync] Sync summary:', {
+      userId: user.id,
+      totalActivitiesFromStrava: activities.length,
+      activitiesSyncedToDatabase: syncedCount,
+      syncSuccess: syncedCount > 0,
+      usingServiceRole: usingServiceRole
+    })
 
     return new Response(JSON.stringify({ 
       success: true,
       synced: syncedCount,
-      total: activities.length 
+      total: activities.length,
+      debug: {
+        userId: user.id,
+        usingServiceRole: usingServiceRole,
+        activitiesReceived: activities.length
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
