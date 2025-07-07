@@ -180,11 +180,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch activities from Strava (simplified - back to 50 activities to avoid timeout)
+    // Fetch activities from Strava with pagination to get up to 300 activities
     console.log('[strava-sync] Fetching activities from Strava for user:', user.id)
     
-    const activitiesResponse = await fetch(
-      'https://www.strava.com/api/v3/athlete/activities?per_page=50',
+    const maxActivities = 300
+    const perPage = 200 // Maximum allowed by Strava API
+    const activities: StravaActivity[] = []
+    
+    // Fetch first page (200 activities)
+    console.log('[strava-sync] Fetching page 1 with 200 activities')
+    let activitiesResponse = await fetch(
+      'https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1',
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -194,15 +200,39 @@ Deno.serve(async (req) => {
 
     if (!activitiesResponse.ok) {
       const errorText = await activitiesResponse.text()
-      console.error('[strava-sync] Failed to fetch Strava activities:', errorText)
+      console.error('[strava-sync] Failed to fetch Strava activities (page 1):', errorText)
       return new Response(JSON.stringify({ error: 'Failed to fetch activities from Strava' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const activities: StravaActivity[] = await activitiesResponse.json()
-    console.log(`[strava-sync] Received ${activities.length} activities from Strava`)
+    let pageActivities: StravaActivity[] = await activitiesResponse.json()
+    console.log(`[strava-sync] Received ${pageActivities.length} activities from page 1`)
+    activities.push(...pageActivities)
+    
+    // Fetch second page (100 more activities to reach 300 total)
+    if (pageActivities.length === 200 && activities.length < maxActivities) {
+      console.log('[strava-sync] Fetching page 2 with 100 activities')
+      activitiesResponse = await fetch(
+        'https://www.strava.com/api/v3/athlete/activities?per_page=100&page=2',
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (activitiesResponse.ok) {
+        pageActivities = await activitiesResponse.json()
+        console.log(`[strava-sync] Received ${pageActivities.length} activities from page 2`)
+        activities.push(...pageActivities)
+      } else {
+        console.warn('[strava-sync] Failed to fetch page 2, continuing with page 1 results')
+      }
+    }
+    
+    console.log(`[strava-sync] Total activities fetched: ${activities.length}`)
     let syncedCount = 0
 
     // Store activities in database
