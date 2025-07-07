@@ -100,10 +100,19 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
   };
 
   const handleStravaCallback = async (code: string, onSyncSuccess?: () => void) => {
-    console.log('[useStravaAuth] Starting Strava callback with code:', code)
+    console.log('[useStravaAuth] Starting Strava callback with code:', code ? `${code.substring(0, 8)}...` : 'missing')
     setIsConnecting(true);
     
-    const maxRetries = 3;
+    // Additional validation
+    if (!code || typeof code !== 'string' || code.length < 20) {
+      console.error('[useStravaAuth] Invalid authorization code format');
+      toast.error('Código de autorização inválido. Tente conectar novamente.');
+      setIsConnecting(false);
+      localStorage.removeItem('strava_connecting');
+      return;
+    }
+    
+    const maxRetries = 2; // Reduced retries since invalid codes won't become valid
     let attempt = 0;
     
     while (attempt < maxRetries) {
@@ -171,7 +180,11 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
         if (data?.success) {
           setIsConnected(true);
           toast.success(`Conectado ao Strava com sucesso! Bem-vindo, ${data.athlete?.firstname || 'Atleta'}!`);
+          
+          // Clean up all connection state
           localStorage.removeItem('strava_connecting');
+          localStorage.removeItem('strava_processed_code');
+          localStorage.removeItem('strava_connect_time');
           
           // Auto-sync activities after successful connection
           console.log('[useStravaAuth] Auto-syncing activities after connection...');

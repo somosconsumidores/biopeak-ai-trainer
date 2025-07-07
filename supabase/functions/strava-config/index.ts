@@ -52,8 +52,11 @@ Deno.serve(async (req) => {
     
     let redirectUri = 'https://biopeak-ai.com/strava' // Default to production
     
-    // Environment detection logic
-    if (forwardedHost && forwardedHost.includes('biopeak-ai.com')) {
+    // Environment detection logic - prioritize current preview URL
+    if (origin && origin.includes('f57b9513-c7c3-4577-8f1c-9c357d60d4b2.lovableproject.com')) {
+      redirectUri = 'https://f57b9513-c7c3-4577-8f1c-9c357d60d4b2.lovableproject.com/strava'
+      console.log('[strava-config] Using current Lovable project environment:', redirectUri)
+    } else if (forwardedHost && forwardedHost.includes('biopeak-ai.com')) {
       redirectUri = 'https://biopeak-ai.com/strava'
       console.log('[strava-config] Detected production environment via forwarded host')
     } else if (host && host.includes('biopeak-ai.com')) {
@@ -72,8 +75,8 @@ Deno.serve(async (req) => {
           redirectUri = `${url.origin}/strava`
           console.log('[strava-config] Using local development environment:', redirectUri)
         } else if (hostname.includes('lovable.app') || hostname.includes('lovableproject.com')) {
-          redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava'
-          console.log('[strava-config] Using preview environment:', redirectUri)
+          redirectUri = `${url.origin}/strava`
+          console.log('[strava-config] Using Lovable environment:', redirectUri)
         } else {
           redirectUri = `${url.origin}/strava`
           console.log('[strava-config] Using other environment:', redirectUri)

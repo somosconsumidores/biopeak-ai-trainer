@@ -15,6 +15,10 @@ export const useStravaCallbackHandler = ({
 
   // Check for OAuth callback on component mount - MUST be last useEffect
   useEffect(() => {
+    // Debounce to prevent multiple executions
+    let timeoutId: NodeJS.Timeout;
+    
+    const processCallback = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const error = urlParams.get('error');
@@ -84,10 +88,38 @@ export const useStravaCallbackHandler = ({
         return;
       }
       
+      // Check if code was already processed (prevent reuse)
+      const processedCode = localStorage.getItem('strava_processed_code');
+      if (processedCode === code) {
+        console.warn('[useStravaCallbackHandler] Code already processed, ignoring');
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+      
+      // Check connection timeout (10 minutes)
+      const connectTime = localStorage.getItem('strava_connect_time');
+      if (connectTime && Date.now() - parseInt(connectTime) > 600000) {
+        console.error('[useStravaCallbackHandler] Connection timeout - code expired');
+        toast.error('Código de autorização expirou. Tente conectar novamente.');
+        localStorage.removeItem('strava_connecting');
+        localStorage.removeItem('strava_state');
+        localStorage.removeItem('strava_connect_time');
+        setIsConnecting(false);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+      
       console.log('[useStravaCallbackHandler] Processing Strava OAuth callback...');
+      localStorage.setItem('strava_processed_code', code); // Mark code as processed
       localStorage.removeItem('strava_state'); // Clean up state
       handleStravaCallback(code);
-      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Clean URL immediately
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.delete('code');
+      currentUrl.searchParams.delete('state');
+      currentUrl.searchParams.delete('scope');
+      window.history.replaceState({}, document.title, currentUrl.pathname);
     } else if (code && !isConnecting) {
       console.warn('[useStravaCallbackHandler] Code found but not in connecting state');
       // Clean up the URL anyway
@@ -106,5 +138,13 @@ export const useStravaCallbackHandler = ({
         }
       }, 2000); // Give some time for potential delayed redirects
     }
+    };
+    
+    // Debounce callback processing
+    timeoutId = setTimeout(processCallback, 100);
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [user, handleStravaCallback, setIsConnecting]); // Add dependencies
 };

@@ -101,14 +101,42 @@ Deno.serve(async (req) => {
     console.log('[strava-auth] Received authorization code and redirect_uri:', {
       hasCode: !!code,
       codeLength: code?.length,
-      redirect_uri
+      codePreview: code ? `${code.substring(0, 8)}...` : null,
+      redirect_uri,
+      userId: user.id
     })
     
-    console.log('[strava-auth] Received authorization code:', code ? 'present' : 'missing')
-    
+    // Validate authorization code format (Strava codes are typically 40 characters)
     if (!code) {
       console.error('[strava-auth] No authorization code provided')
       return new Response(JSON.stringify({ error: 'Authorization code required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    
+    if (typeof code !== 'string' || code.length < 20 || code.length > 80) {
+      console.error('[strava-auth] Invalid authorization code format:', {
+        type: typeof code,
+        length: code?.length,
+        preview: typeof code === 'string' ? `${code.substring(0, 8)}...` : 'not string'
+      })
+      return new Response(JSON.stringify({ 
+        error: 'Invalid authorization code format',
+        details: 'Authorization code must be a valid string from Strava'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    
+    // Validate redirect_uri
+    if (!redirect_uri || typeof redirect_uri !== 'string') {
+      console.error('[strava-auth] Invalid redirect_uri:', redirect_uri)
+      return new Response(JSON.stringify({ 
+        error: 'Invalid redirect_uri',
+        details: 'redirect_uri is required and must be a valid URL'
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -163,11 +191,37 @@ Deno.serve(async (req) => {
       console.error('[strava-auth] Strava token exchange failed:', {
         status: tokenResponse.status,
         statusText: tokenResponse.statusText,
-        body: errorText
+        body: errorText,
+        requestBody: {
+          client_id: clientId,
+          grant_type: 'authorization_code',
+          redirect_uri: redirect_uri,
+          code_preview: code ? `${code.substring(0, 8)}...` : null
+        }
       })
+      
+      // Parse Strava error response for better error messages
+      let errorMessage = 'Failed to exchange authorization code'
+      let errorDetails = errorText
+      
+      try {
+        const errorJson = JSON.parse(errorText)
+        if (errorJson.message) {
+          errorDetails = errorJson.message
+          if (errorJson.message.includes('invalid')) {
+            errorMessage = 'Invalid authorization code or expired'
+          } else if (errorJson.message.includes('redirect_uri')) {
+            errorMessage = 'Redirect URI mismatch'
+          }
+        }
+      } catch (e) {
+        // Keep original error text if not JSON
+      }
+      
       return new Response(JSON.stringify({ 
-        error: 'Failed to exchange authorization code',
-        details: errorText 
+        error: errorMessage,
+        details: errorDetails,
+        strava_status: tokenResponse.status
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
