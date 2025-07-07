@@ -218,11 +218,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "training_sessions_strava_activity_id_fkey"
-            columns: ["strava_activity_id"]
+            foreignKeyName: "training_sessions_strava_activity_fkey"
+            columns: ["user_id", "strava_activity_id"]
             isOneToOne: false
             referencedRelation: "strava_activities"
-            referencedColumns: ["strava_activity_id"]
+            referencedColumns: ["user_id", "strava_activity_id"]
           },
         ]
       }

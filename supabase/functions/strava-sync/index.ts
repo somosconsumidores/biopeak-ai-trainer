@@ -308,6 +308,7 @@ async function storeActivitiesInDatabase(activities: StravaActivity[], supabaseC
     console.log(`[strava-sync] Processing activity ${activity.id}: ${activity.name}`)
     
     // First attempt with ANON_KEY
+    // Using the new composite unique constraint (user_id, strava_activity_id)
     let { error: insertError } = await supabaseClient
       .from('strava_activities')
       .upsert({
@@ -326,7 +327,7 @@ async function storeActivitiesInDatabase(activities: StravaActivity[], supabaseC
         max_heartrate: activity.max_heartrate,
         calories: activity.calories,
       }, {
-        onConflict: 'strava_activity_id'
+        onConflict: 'user_id,strava_activity_id'  // Updated to use composite constraint
       })
 
     // If RLS blocks, try with SERVICE_ROLE_KEY
@@ -351,7 +352,7 @@ async function storeActivitiesInDatabase(activities: StravaActivity[], supabaseC
           max_heartrate: activity.max_heartrate,
           calories: activity.calories,
         }, {
-          onConflict: 'strava_activity_id'
+          onConflict: 'user_id,strava_activity_id'  // Updated to use composite constraint
         })
         
       if (!serviceInsertError) {
