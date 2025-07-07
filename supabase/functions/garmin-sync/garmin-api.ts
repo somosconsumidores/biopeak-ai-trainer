@@ -3,6 +3,18 @@ import { generateSignature, buildAuthorizationHeader } from './oauth-utils.ts';
 // Make authenticated API call to Garmin
 export async function makeGarminApiCall(url: string, accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
   console.log(`Making OAuth 1.0 call to: ${url}`);
+  console.log('Token validation:', {
+    accessToken: accessToken?.substring(0, 8) + '...',
+    tokenSecret: tokenSecret?.substring(0, 8) + '...',
+    clientId: clientId?.substring(0, 8) + '...',
+    clientSecret: clientSecret ? 'present' : 'missing'
+  });
+  
+  // Validate that we have real tokens, not demo UUIDs
+  if (accessToken?.includes('-') && accessToken.length === 36) {
+    console.warn('Access token appears to be a UUID (demo token)');
+    throw new Error('Demo tokens cannot be used for real API calls');
+  }
   
   const apiParams = {
     oauth_consumer_key: clientId,
