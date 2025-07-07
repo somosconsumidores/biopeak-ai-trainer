@@ -104,6 +104,33 @@ export type Database = {
         }
         Relationships: []
       }
+      oauth_temp_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          oauth_token: string
+          oauth_token_secret: string
+          provider: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          oauth_token: string
+          oauth_token_secret: string
+          provider?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          oauth_token?: string
+          oauth_token_secret?: string
+          provider?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -321,7 +348,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      cleanup_expired_oauth_tokens: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

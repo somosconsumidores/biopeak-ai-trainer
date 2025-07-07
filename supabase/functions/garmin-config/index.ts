@@ -127,18 +127,18 @@ serve(async (req) => {
       throw new Error('Invalid request token response');
     }
 
-    // Store request token temporarily in database
+    // Store request token temporarily in oauth_temp_tokens table
     const { error: insertError } = await supabase
-      .from('garmin_tokens')
-      .upsert({
-        user_id: 'temp_request_token',
-        access_token: oauthToken,
-        refresh_token: oauthTokenSecret,
-        expires_at: new Date(Date.now() + 600000).toISOString(), // 10 minutes
+      .from('oauth_temp_tokens')
+      .insert({
+        oauth_token: oauthToken,
+        oauth_token_secret: oauthTokenSecret,
+        provider: 'garmin'
       });
 
     if (insertError) {
       console.error('Error storing request token:', insertError);
+      throw new Error(`Failed to store temporary token: ${insertError.message}`);
     }
 
     // Create authorization URL

@@ -80,19 +80,20 @@ serve(async (req) => {
 
     console.log('Processing Garmin OAuth with token:', oauth_token);
 
-    // Get stored request token secret
+    // Get stored request token secret from temp table
     const { data: requestTokenData, error: tokenError } = await supabase
-      .from('garmin_tokens')
+      .from('oauth_temp_tokens')
       .select('*')
-      .eq('user_id', 'temp_request_token')
-      .eq('access_token', oauth_token)
+      .eq('oauth_token', oauth_token)
+      .eq('provider', 'garmin')
       .single();
 
     if (tokenError || !requestTokenData) {
-      throw new Error('Request token not found or expired');
+      console.error('Request token lookup error:', tokenError);
+      throw new Error('Request token not found or expired. Please start the OAuth flow again.');
     }
 
-    const requestTokenSecret = requestTokenData.refresh_token;
+    const requestTokenSecret = requestTokenData.oauth_token_secret;
 
     // Step 2: Exchange for access token
     const accessTokenUrl = 'https://connectapi.garmin.com/oauth-service/oauth/access_token';
@@ -142,10 +143,9 @@ serve(async (req) => {
 
     // Delete temporary request token
     await supabase
-      .from('garmin_tokens')
+      .from('oauth_temp_tokens')
       .delete()
-      .eq('user_id', 'temp_request_token')
-      .eq('access_token', oauth_token);
+      .eq('oauth_token', oauth_token);
 
     // Store final tokens
     const { error: insertError } = await supabase
