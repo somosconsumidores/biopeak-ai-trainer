@@ -114,17 +114,27 @@ serve(async (req) => {
     const accessToken = tokenData.access_token;
     const tokenSecret = tokenData.refresh_token;
 
-    // Try multiple Garmin API endpoints
+    // Try correct Garmin Health API endpoints with date parameters
+    const baseUrl = 'https://healthapi.garmin.com';
+    const today = new Date().toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
     const apiEndpoints = [
-      'https://connectapi.garmin.com/wellness-api/rest/activities',
-      'https://connectapi.garmin.com/wellness-api/rest/dailies',
-      'https://connectapi.garmin.com/activitylist-service/activities/search/activities'
+      `${baseUrl}/wellness-api/rest/activities?fromDate=${thirtyDaysAgo}&toDate=${today}`,
+      `${baseUrl}/wellness-api/rest/activities`,
+      `${baseUrl}/wellness-api/rest/dailies?fromDate=${thirtyDaysAgo}&toDate=${today}`,
+      `${baseUrl}/wellness-api/rest/summaries?fromDate=${thirtyDaysAgo}&toDate=${today}`,
+      `${baseUrl}/wellness-api/rest/activities/search`
     ];
     
     let activitiesData = null;
     let apiError = null;
     
-    console.log('Trying Garmin API endpoints...');
+    console.log('Trying Garmin Health API endpoints...');
+    console.log('Using access token:', accessToken ? 'Present' : 'Missing');
+    console.log('Using token secret:', tokenSecret ? 'Present' : 'Missing');
+    console.log('Using client ID:', clientId ? 'Present' : 'Missing');
+    console.log('Using client secret:', clientSecret ? 'Present' : 'Missing');
     
     for (const endpoint of apiEndpoints) {
       try {
@@ -141,7 +151,20 @@ serve(async (req) => {
         } else {
           const errorText = await activitiesResponse.text();
           console.error(`API error for ${endpoint}:`, errorText);
-          apiError = `${activitiesResponse.status} - ${errorText}`;
+          
+          // Enhanced error detection
+          if (activitiesResponse.status === 401) {
+            console.error('Authentication failed - checking OAuth tokens and signature');
+            apiError = `Authentication failed (401) - OAuth signature or tokens invalid: ${errorText}`;
+          } else if (activitiesResponse.status === 403) {
+            console.error('Access forbidden - API may not be enabled for this endpoint');
+            apiError = `Access forbidden (403) - API endpoint may not be enabled: ${errorText}`;
+          } else if (activitiesResponse.status === 404) {
+            console.error('Endpoint not found - checking if URL is correct');
+            apiError = `Endpoint not found (404) - URL may be incorrect: ${errorText}`;
+          } else {
+            apiError = `${activitiesResponse.status} - ${errorText}`;
+          }
         }
       } catch (error) {
         console.error(`Exception calling ${endpoint}:`, error);
