@@ -40,11 +40,15 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
 
     const scope = 'read,activity:read_all';
     const state = Math.random().toString(36).substring(2, 15);
-    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava';
+    
+    // Use the current application URL to ensure Strava redirects back to the correct domain
+    const currentOrigin = window.location.origin;
+    const redirectUri = `${currentOrigin}/strava`;
     
     const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&approval_prompt=force&scope=${scope}&state=${state}`;
     
     console.log('[useStravaAuth] Redirecting to Strava with URL:', authUrl);
+    console.log('[useStravaAuth] Using redirect URI:', redirectUri);
     
     // Store connection state
     localStorage.setItem('strava_connecting', 'true');
@@ -96,7 +100,7 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
           },
           body: JSON.stringify({ 
             code,
-            redirect_uri: 'https://preview--biopeak-ai-trainer.lovable.app/strava' 
+            redirect_uri: `${window.location.origin}/strava`
           })
         });
         
