@@ -135,6 +135,16 @@ export const useStravaIntegration = () => {
       hasConfig: !!stravaConfig,
       config: stravaConfig
     });
+    
+    // Force clean any previous connection state and URL parameters
+    localStorage.removeItem('strava_connecting');
+    localStorage.removeItem('strava_state');
+    localStorage.removeItem('strava_connect_time');
+    
+    // Clean URL of any existing OAuth parameters
+    window.history.replaceState({}, document.title, window.location.pathname);
+    
+    console.log('[useStravaIntegration] Cleaned previous connection state and URL');
 
     if (!stravaConfig) {
       console.error('[useStravaIntegration] No Strava config available');
@@ -152,6 +162,15 @@ export const useStravaIntegration = () => {
     const scope = 'read,activity:read_all';
     const state = Math.random().toString(36).substring(2, 15);
     const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(stravaConfig.redirectUri)}&approval_prompt=force&scope=${scope}&state=${state}`;
+    
+    console.log('[useStravaIntegration] Generated auth URL details:', {
+      authUrl,
+      clientId: stravaConfig.clientId,
+      redirectUri: stravaConfig.redirectUri,
+      encodedRedirectUri: encodeURIComponent(stravaConfig.redirectUri),
+      scope,
+      state
+    });
     
     console.log('[useStravaIntegration] Generated auth URL:', authUrl);
     console.log('[useStravaIntegration] About to set localStorage items');
