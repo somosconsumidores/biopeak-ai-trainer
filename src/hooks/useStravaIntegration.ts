@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const useStravaIntegration = () => {
   console.log('useStravaIntegration hook initialized');
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  console.log('[useStravaIntegration] Auth context:', { hasUser: !!user, userId: user?.id, hasSession: !!session });
   const [isConnected, setIsConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
