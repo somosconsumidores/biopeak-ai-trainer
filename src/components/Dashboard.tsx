@@ -2,12 +2,14 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Activity, ChartBar, Bell, Settings, ExternalLink } from "lucide-react";
+import { Activity, ChartBar, Bell, Settings, ExternalLink, Zap, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
+import { useTrainingSessions } from "@/hooks/useTrainingSessions";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { processingStravaData, processStravaData } = useTrainingSessions();
   const {
     performancePeak,
     performanceChange,
@@ -245,22 +247,39 @@ const Dashboard = () => {
             ))
           ) : (
             <Card className="glass p-6 col-span-full text-center">
-              <p className="text-muted-foreground mb-4">
-                Nenhuma sessão de treino encontrada. Para ver suas métricas:
+              <Activity className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-2">
+                Dados de treino não processados
+              </h3>
+              <p className="text-muted-foreground mb-6">
+                Suas atividades do Strava estão sincronizadas, mas precisam ser processadas para gerar as métricas do dashboard.
               </p>
-              <div className="space-y-2 text-sm text-muted-foreground mb-4">
-                <p>1. Conecte-se ao Strava</p>
-                <p>2. Sincronize suas atividades</p>
-                <p>3. Processe os dados de treino</p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button 
+                  variant="ai" 
+                  onClick={processStravaData}
+                  disabled={processingStravaData}
+                >
+                  {processingStravaData ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Zap className="w-4 h-4 mr-2" />
+                  )}
+                  {processingStravaData ? 'Processando...' : 'Processar Dados'}
+                </Button>
+                <Button 
+                  variant="glass" 
+                  onClick={() => navigate('/strava')}
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Ver Strava
+                </Button>
               </div>
-              <Button 
-                variant="glass" 
-                className="mt-4"
-                onClick={() => navigate('/strava')}
-              >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Conectar Strava
-              </Button>
+              {processingStravaData && (
+                <p className="text-sm text-muted-foreground mt-4">
+                  Processando suas atividades para gerar métricas...
+                </p>
+              )}
             </Card>
           )}
         </div>
