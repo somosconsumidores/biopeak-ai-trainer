@@ -5,6 +5,7 @@ import BioPeakLanding from "@/components/BioPeakLanding";
 import AppNavigation from "@/components/AppNavigation";
 import MobileNavigation from "@/components/MobileNavigation";
 import MobileHeader from "@/components/MobileHeader";
+import Footer from "@/components/Footer";
 import Dashboard from "@/components/Dashboard";
 import TrainingSession from "@/components/TrainingSession";
 import TrainingComparison from "@/components/TrainingComparison";
@@ -96,6 +97,9 @@ const Index = () => {
           {renderCurrentView()}
         </main>
       </div>
+      
+      {/* Footer */}
+      <Footer />
       
       {/* Mobile Bottom Navigation */}
       <MobileNavigation activeView={currentView} onViewChange={setCurrentView} />
