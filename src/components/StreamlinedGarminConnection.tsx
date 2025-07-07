@@ -216,8 +216,17 @@ const StreamlinedGarminConnection = () => {
     return new Promise(async (resolve) => {
       try {
         console.log('📞 Calling garmin-config function...');
-        const { data, error } = await supabase.functions.invoke('garmin-config');
+        let { data, error } = await supabase.functions.invoke('garmin-config');
         console.log('📞 Garmin-config response:', { data, error });
+        
+        // If real OAuth fails, try fallback
+        if (error || !data?.authUrl) {
+          console.log('⚠️ Real OAuth failed, trying fallback...');
+          const fallbackResponse = await supabase.functions.invoke('garmin-config-fallback');
+          data = fallbackResponse.data;
+          error = fallbackResponse.error;
+          console.log('📞 Fallback response:', { data, error });
+        }
         
         if (error || !data?.authUrl) {
           console.error('❌ No auth URL received:', error);
