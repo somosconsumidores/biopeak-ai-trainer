@@ -374,9 +374,12 @@ export const useStravaIntegration = () => {
     const storedState = localStorage.getItem('strava_state');
     const isConnecting = localStorage.getItem('strava_connecting') === 'true';
     
-    console.log('[useStravaIntegration] Checking for OAuth callback:', {
-      currentUrl: window.location.href,
+    console.log('[useStravaIntegration] ===== CALLBACK CHECK =====');
+    console.log('[useStravaIntegration] Current URL:', window.location.href);
+    console.log('[useStravaIntegration] URL Search Params:', window.location.search);
+    console.log('[useStravaIntegration] Callback analysis:', {
       hasCode: !!code,
+      code: code ? `${code.substring(0, 10)}...` : null,
       hasError: !!error,
       error,
       errorDescription,
@@ -384,8 +387,14 @@ export const useStravaIntegration = () => {
       storedState,
       stateMatches: state === storedState,
       isConnecting,
-      localStorage: localStorage.getItem('strava_connecting'),
+      user: user?.id,
+      hasUser: !!user,
       allParams: Array.from(urlParams.entries())
+    });
+    console.log('[useStravaIntegration] LocalStorage state:', {
+      connecting: localStorage.getItem('strava_connecting'),
+      state: localStorage.getItem('strava_state'),
+      connectTime: localStorage.getItem('strava_connect_time')
     });
     
     if (error && isConnecting) {
