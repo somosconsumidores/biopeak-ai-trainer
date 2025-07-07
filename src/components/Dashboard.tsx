@@ -4,9 +4,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Activity, ChartBar, Bell, Settings, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const {
+    performancePeak,
+    performanceChange,
+    vo2Max,
+    averageHeartRate,
+    recoveryScore,
+    weeklyData,
+    totalSessions,
+    recentSessions,
+    loading
+  } = useDashboardMetrics();
 
   return (
     <div className="p-6 space-y-6">
@@ -45,10 +57,17 @@ const Dashboard = () => {
               <Activity className="w-5 h-5 text-primary" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-primary mb-2">94.2%</div>
-          <p className="text-muted-foreground text-sm">+12% vs semana anterior</p>
+          <div className="text-3xl font-bold text-primary mb-2">
+            {loading ? '...' : `${performancePeak}%`}
+          </div>
+          <p className="text-muted-foreground text-sm">
+            {loading ? 'Carregando...' : `${performanceChange >= 0 ? '+' : ''}${performanceChange}% vs semana anterior`}
+          </p>
           <div className="mt-4 h-2 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full w-[94%] animate-fade-in"></div>
+            <div 
+              className="h-full bg-primary rounded-full animate-fade-in transition-all duration-1000" 
+              style={{ width: `${performancePeak}%` }}
+            ></div>
           </div>
         </Card>
 
@@ -59,23 +78,40 @@ const Dashboard = () => {
               <ChartBar className="w-5 h-5 text-primary" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-primary mb-2">52.1</div>
-          <p className="text-muted-foreground text-sm">Categoria: Excelente</p>
+          <div className="text-3xl font-bold text-primary mb-2">
+            {loading ? '...' : vo2Max.toFixed(1)}
+          </div>
+          <p className="text-muted-foreground text-sm">
+            {loading ? 'Carregando...' : 
+              vo2Max >= 50 ? 'Categoria: Excelente' :
+              vo2Max >= 40 ? 'Categoria: Bom' :
+              vo2Max >= 30 ? 'Categoria: Regular' : 'Categoria: Baixo'
+            }
+          </p>
           <div className="mt-4 h-2 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full w-[85%] animate-fade-in"></div>
+            <div 
+              className="h-full bg-primary rounded-full animate-fade-in transition-all duration-1000" 
+              style={{ width: `${Math.min(100, (vo2Max / 60) * 100)}%` }}
+            ></div>
           </div>
         </Card>
 
         <Card className="glass p-6 animate-fade-in" style={{animationDelay: '0.2s'}}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground">Zona Ótima</h3>
+            <h3 className="font-semibold text-foreground">FC Média</h3>
             <div className="p-2 bg-primary/20 rounded-lg">
               <Activity className="w-5 h-5 text-primary" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-primary mb-2">5K-10K</div>
-          <p className="text-muted-foreground text-sm">Melhor performance</p>
-          <Badge className="mt-3 bg-primary/20 text-primary border-primary/30">Otimizada</Badge>
+          <div className="text-3xl font-bold text-primary mb-2">
+            {loading ? '...' : `${averageHeartRate || 0} BPM`}
+          </div>
+          <p className="text-muted-foreground text-sm">
+            {loading ? 'Carregando...' : 'Frequência cardíaca média'}
+          </p>
+          <Badge className="mt-3 bg-primary/20 text-primary border-primary/30">
+            {averageHeartRate > 0 ? 'Ativo' : 'Sem dados'}
+          </Badge>
         </Card>
 
         <Card className="glass p-6 animate-fade-in" style={{animationDelay: '0.3s'}}>
@@ -85,9 +121,26 @@ const Dashboard = () => {
               <Settings className="w-5 h-5 text-primary" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-primary mb-2">85%</div>
-          <p className="text-muted-foreground text-sm">Status: Boa</p>
-          <Badge className="mt-3 bg-green-500/20 text-green-400 border-green-500/30">Pronto</Badge>
+          <div className="text-3xl font-bold text-primary mb-2">
+            {loading ? '...' : `${recoveryScore}%`}
+          </div>
+          <p className="text-muted-foreground text-sm">
+            {loading ? 'Carregando...' : 
+              recoveryScore >= 80 ? 'Status: Excelente' :
+              recoveryScore >= 60 ? 'Status: Boa' :
+              recoveryScore >= 40 ? 'Status: Regular' : 'Status: Baixa'
+            }
+          </p>
+          <Badge className={`mt-3 ${
+            recoveryScore >= 80 ? 'bg-green-500/20 text-green-400 border-green-500/30' :
+            recoveryScore >= 60 ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+            recoveryScore >= 40 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+            'bg-red-500/20 text-red-400 border-red-500/30'
+          }`}>
+            {recoveryScore >= 80 ? 'Pronto' :
+             recoveryScore >= 60 ? 'Bom' :
+             recoveryScore >= 40 ? 'Cuidado' : 'Descanso'}
+          </Badge>
         </Card>
       </div>
 
@@ -96,14 +149,14 @@ const Dashboard = () => {
         <Card className="glass p-6 animate-slide-up">
           <h3 className="text-xl font-semibold text-foreground mb-4">Evolução Semanal</h3>
           <div className="h-64 bg-gradient-to-t from-primary/10 to-transparent rounded-lg p-4 relative overflow-hidden">
-            {/* Simulated Chart */}
+            {/* Performance Chart */}
             <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
-              {[65, 72, 68, 78, 85, 82, 94].map((height, index) => (
+              {weeklyData.map((height, index) => (
                 <div key={index} className="flex flex-col items-center">
                   <div 
                     className="w-8 bg-primary rounded-t-lg transition-all duration-1000 animate-slide-up"
                     style={{
-                      height: `${height}%`,
+                      height: `${Math.max(5, height)}%`,
                       animationDelay: `${index * 0.1}s`
                     }}
                   ></div>
@@ -160,23 +213,41 @@ const Dashboard = () => {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { date: "Hoje", type: "Corrida", duration: "45min", distance: "8.2km", score: 94 },
-            { date: "Ontem", type: "Ciclismo", duration: "1h 20min", distance: "32.5km", score: 88 },
-            { date: "2 dias", type: "Corrida", duration: "30min", distance: "5.8km", score: 82 }
-          ].map((session, index) => (
-            <Card key={index} className="glass glass-hover p-4 cursor-pointer animate-slide-up" style={{animationDelay: `${index * 0.1}s`}}>
-              <div className="flex items-center justify-between mb-3">
-                <Badge variant="outline" className="text-xs">{session.date}</Badge>
-                <div className="text-2xl font-bold text-primary">{session.score}%</div>
-              </div>
-              <h4 className="font-medium text-foreground mb-2">{session.type}</h4>
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>{session.duration}</span>
-                <span>{session.distance}</span>
-              </div>
+          {loading ? (
+            Array.from({ length: 3 }).map((_, index) => (
+              <Card key={index} className="glass p-4 animate-pulse">
+                <div className="h-4 bg-muted rounded mb-3"></div>
+                <div className="h-6 bg-muted rounded mb-2"></div>
+                <div className="h-4 bg-muted rounded"></div>
+              </Card>
+            ))
+          ) : recentSessions.length > 0 ? (
+            recentSessions.map((session, index) => (
+              <Card key={index} className="glass glass-hover p-4 cursor-pointer animate-slide-up" style={{animationDelay: `${index * 0.1}s`}}>
+                <div className="flex items-center justify-between mb-3">
+                  <Badge variant="outline" className="text-xs">{session.date}</Badge>
+                  <div className="text-2xl font-bold text-primary">{session.score}%</div>
+                </div>
+                <h4 className="font-medium text-foreground mb-2">{session.type}</h4>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>{session.duration}</span>
+                  <span>{session.distance}</span>
+                </div>
+              </Card>
+            ))
+          ) : (
+            <Card className="glass p-6 col-span-full text-center">
+              <p className="text-muted-foreground">Nenhuma sessão encontrada. Conecte-se ao Strava para sincronizar suas atividades.</p>
+              <Button 
+                variant="glass" 
+                className="mt-4"
+                onClick={() => navigate('/strava')}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Conectar Strava
+              </Button>
             </Card>
-          ))}
+          )}
         </div>
       </Card>
     </div>

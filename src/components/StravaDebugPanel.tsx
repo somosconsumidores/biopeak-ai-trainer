@@ -35,6 +35,28 @@ const StravaDebugPanel = () => {
     };
     setDebugInfo(JSON.stringify(info, null, 2));
   };
-  return;
+  return (
+    <Card className="glass p-4 mt-4">
+      <div className="flex justify-between items-center mb-3">
+        <h4 className="text-sm font-semibold text-foreground">Debug Panel</h4>
+        <div className="flex space-x-2">
+          <Button onClick={showDebugInfo} variant="ghost" size="sm" className="text-xs">
+            <RefreshCw className="w-3 h-3 mr-1" />
+            Info
+          </Button>
+          <Button onClick={clearAllStorage} variant="ghost" size="sm" className="text-xs">
+            <Trash2 className="w-3 h-3 mr-1" />
+            Clear
+          </Button>
+        </div>
+      </div>
+      
+      {debugInfo && (
+        <div className="bg-muted p-3 rounded text-xs font-mono overflow-auto max-h-40">
+          <pre>{debugInfo}</pre>
+        </div>
+      )}
+    </Card>
+  );
 };
 export default StravaDebugPanel;
