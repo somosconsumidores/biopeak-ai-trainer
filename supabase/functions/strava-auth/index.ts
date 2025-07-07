@@ -67,14 +67,33 @@ Deno.serve(async (req) => {
 
     let requestBody;
     try {
-      requestBody = await req.json()
-      console.log('[strava-auth] Request body parsed successfully')
+      const bodyText = await req.text();
+      console.log('[strava-auth] Raw request body:', bodyText);
+      
+      if (!bodyText || bodyText.trim() === '') {
+        console.error('[strava-auth] Empty request body received');
+        return new Response(JSON.stringify({ error: 'Empty request body' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      requestBody = JSON.parse(bodyText);
+      console.log('[strava-auth] Request body parsed successfully:', requestBody);
     } catch (parseError) {
-      console.error('[strava-auth] Failed to parse request body:', parseError)
-      return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+      console.error('[strava-auth] Failed to parse request body:', parseError);
+      console.error('[strava-auth] Parse error details:', {
+        message: parseError.message,
+        name: parseError.name,
+        stack: parseError.stack
+      });
+      return new Response(JSON.stringify({ 
+        error: 'Invalid JSON in request body',
+        details: parseError.message 
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      });
     }
 
     const { code } = requestBody
