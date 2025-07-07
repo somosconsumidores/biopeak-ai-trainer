@@ -126,7 +126,14 @@ serve(async (req) => {
         .eq('provider', 'garmin');
       
       console.log('Available temp tokens:', allTokens);
-      throw new Error('Request token not found or expired. Please start the OAuth flow again.');
+      
+      // Clean up any expired tokens
+      await supabase
+        .from('oauth_temp_tokens')
+        .delete()
+        .lt('expires_at', new Date().toISOString());
+      
+      throw new Error('Request token not found or expired. Please restart the OAuth flow from the beginning.');
     }
 
     const requestTokenSecret = requestTokenData.oauth_token_secret;

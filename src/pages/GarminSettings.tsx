@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,16 @@ const GarminSettings = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const oauthProcessedRef = useRef(false);
 
   useEffect(() => {
     if (user) {
       checkGarminConnection();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user && !oauthProcessedRef.current) {
       handleOAuthCallback();
     }
   }, [user, searchParams]);
@@ -34,7 +40,7 @@ const GarminSettings = () => {
         .from('garmin_tokens')
         .select('*')
         .eq('user_id', user?.id)
-        .single();
+        .maybeSingle();
 
       if (data && !error) {
         setIsConnected(true);
@@ -51,8 +57,10 @@ const GarminSettings = () => {
     const oauthToken = searchParams.get('oauth_token');
     const oauthVerifier = searchParams.get('oauth_verifier');
     
-    if (oauthToken && oauthVerifier) {
+    if (oauthToken && oauthVerifier && !oauthProcessedRef.current) {
+      oauthProcessedRef.current = true;
       setIsConnecting(true);
+      
       try {
         console.log('Processing OAuth callback:', { oauthToken, oauthVerifier });
         
@@ -65,7 +73,7 @@ const GarminSettings = () => {
 
         if (error) throw error;
 
-        if (data.success) {
+        if (data?.success) {
           setIsConnected(true);
           toast({
             title: "Garmin Connect conectado!",
@@ -75,14 +83,21 @@ const GarminSettings = () => {
         }
       } catch (error) {
         console.error('OAuth callback error:', error);
+        const errorMessage = error.message || "Não foi possível conectar com o Garmin Connect.";
+        
         toast({
           title: "Erro na conexão",
-          description: "Não foi possível conectar com o Garmin Connect.",
+          description: errorMessage,
           variant: "destructive",
         });
+        
+        // Reset if token expired/not found to allow retry
+        if (errorMessage.includes('expired') || errorMessage.includes('not found')) {
+          oauthProcessedRef.current = false;
+        }
       } finally {
         setIsConnecting(false);
-        // Limpar parâmetros da URL
+        // Clear URL parameters
         navigate('/garmin', { replace: true });
       }
     }

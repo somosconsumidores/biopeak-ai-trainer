@@ -147,6 +147,17 @@ serve(async (req) => {
 
     console.log('Successfully parsed request tokens');
 
+    // Clean up expired tokens first
+    console.log('Cleaning up expired tokens...');
+    const { error: cleanupError } = await supabase
+      .from('oauth_temp_tokens')
+      .delete()
+      .lt('expires_at', new Date().toISOString());
+    
+    if (cleanupError) {
+      console.warn('Failed to cleanup expired tokens:', cleanupError);
+    }
+
     // Store request token temporarily in oauth_temp_tokens table
     console.log('Storing temporary request token...');
     const { error: insertError } = await supabase
