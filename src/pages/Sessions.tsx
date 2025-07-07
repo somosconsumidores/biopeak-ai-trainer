@@ -46,7 +46,7 @@ const Sessions = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [activityTypes, setActivityTypes] = useState<string[]>([]);
   const [filters, setFilters] = useState<SessionFilters>({
-    activityType: '',
+    activityType: 'all',
     dateFrom: '',
     dateTo: '',
     keyword: ''
@@ -67,7 +67,7 @@ const Sessions = () => {
         .order('start_date', { ascending: false });
 
       // Apply filters
-      if (currentFilters.activityType) {
+      if (currentFilters.activityType && currentFilters.activityType !== 'all') {
         query = query.eq('type', currentFilters.activityType);
       }
 
@@ -132,7 +132,7 @@ const Sessions = () => {
 
   const clearFilters = () => {
     const emptyFilters = {
-      activityType: '',
+      activityType: 'all',
       dateFrom: '',
       dateTo: '',
       keyword: ''
@@ -198,7 +198,7 @@ const Sessions = () => {
                   <SelectValue placeholder="Todos os tipos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos os tipos</SelectItem>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
                   {activityTypes.map(type => (
                     <SelectItem key={type} value={type}>{type}</SelectItem>
                   ))}
