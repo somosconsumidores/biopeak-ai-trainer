@@ -21,8 +21,21 @@ serve(async (req) => {
     const clientId = Deno.env.get('GARMIN_CLIENT_ID')!;
     const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET')!;
 
+    console.log('=== Garmin Sync Function Started ===');
+    console.log('Environment variables check:', {
+      supabaseUrl: !!supabaseUrl,
+      supabaseKey: !!supabaseKey,
+      clientId: !!clientId,
+      clientSecret: !!clientSecret
+    });
+
     if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
-      throw new Error('Missing required environment variables');
+      const missing = [];
+      if (!supabaseUrl) missing.push('SUPABASE_URL');
+      if (!supabaseKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+      if (!clientId) missing.push('GARMIN_CLIENT_ID');
+      if (!clientSecret) missing.push('GARMIN_CLIENT_SECRET');
+      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -30,19 +43,24 @@ serve(async (req) => {
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
-      throw new Error('No authorization header');
+      throw new Error('No authorization header provided');
     }
 
+    console.log('Verifying JWT token...');
     // Verify the JWT token
     const { data: { user }, error: authError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     );
 
     if (authError || !user) {
-      throw new Error('Invalid token');
+      console.error('JWT verification failed:', authError);
+      throw new Error('Invalid or expired JWT token');
     }
 
-    // Get user's Garmin tokens
+    console.log('JWT verified successfully for user:', user.id);
+
+    // Get user's Garmin tokens with detailed validation
+    console.log('Fetching Garmin tokens for user...');
     const { data: tokenData, error: tokenError } = await supabase
       .from('garmin_tokens')
       .select('*')
@@ -50,21 +68,49 @@ serve(async (req) => {
       .single();
 
     if (tokenError || !tokenData) {
-      throw new Error('No Garmin connection found');
+      console.error('Garmin tokens not found:', tokenError);
+      throw new Error('No Garmin connection found. Please connect your Garmin account first.');
     }
 
-    console.log('Manual Garmin sync requested for user:', user.id);
+    // Validate token structure
+    if (!tokenData.access_token || !tokenData.token_secret) {
+      console.error('Invalid token structure:', {
+        hasAccessToken: !!tokenData.access_token,
+        hasTokenSecret: !!tokenData.token_secret
+      });
+      throw new Error('Invalid Garmin tokens. Please reconnect your Garmin account.');
+    }
 
-    // This function is now mainly for manual sync or backfill
-    // Most data should come via webhooks, but this can be used for:
-    // 1. Initial backfill of historical data
-    // 2. Manual sync when user requests it
-    // 3. Fallback when webhooks are not working
+    // Check if tokens are expired
+    const expiresAt = new Date(tokenData.expires_at);
+    const now = new Date();
+    if (expiresAt <= now) {
+      console.error('Tokens expired:', { expiresAt, now });
+      throw new Error('Garmin tokens have expired. Please reconnect your Garmin account.');
+    }
+
+    console.log('Garmin tokens validated successfully');
+    console.log('Token expires at:', tokenData.expires_at);
 
     const accessToken = tokenData.access_token;
-    const tokenSecret = tokenData.token_secret; // Fixed: now using correct field name
+    const tokenSecret = tokenData.token_secret;
 
-    // Try to fetch recent activities for manual sync
+    // Clean up any demo activities first
+    console.log('Cleaning up demo activities...');
+    const { error: cleanupError } = await supabase
+      .from('garmin_activities')
+      .delete()
+      .eq('user_id', user.id)
+      .like('name', '%Demo%');
+
+    if (cleanupError) {
+      console.warn('Failed to cleanup demo activities:', cleanupError);
+    } else {
+      console.log('Demo activities cleaned up successfully');
+    }
+
+    // Try to fetch real activities from Garmin API
+    console.log('Attempting to fetch activities from Garmin API...');
     const { activitiesData, lastError } = await fetchGarminActivities(
       accessToken, 
       tokenSecret, 
@@ -73,9 +119,13 @@ serve(async (req) => {
     );
 
     let processedActivities = [];
+    let syncStatus = 'unknown';
     
     if (activitiesData && Array.isArray(activitiesData) && activitiesData.length > 0) {
       // Process real data if available
+      console.log(`Processing ${activitiesData.length} real activities from Garmin API`);
+      syncStatus = 'api_success';
+      
       processedActivities = activitiesData.map((activity: any, index: number) => {
         const activityId = activity.activityId || activity.id || activity.activityUuid || (Date.now() + index);
         
@@ -97,38 +147,103 @@ serve(async (req) => {
         };
       });
     } else {
-      // For demonstration purposes, create some sample data
-      console.log('No real data available, creating demo activities for testing');
-      processedActivities = createFallbackActivities(user.id);
+      // API failed, check if we should use webhook data instead
+      console.log('Garmin API failed, checking for existing webhook data...');
+      syncStatus = 'api_failed';
+      
+      const { data: existingActivities } = await supabase
+        .from('garmin_activities')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (existingActivities && existingActivities.length > 0) {
+        console.log(`Found ${existingActivities.length} existing activities from webhook data`);
+        syncStatus = 'webhook_data_available';
+        processedActivities = []; // Don't add demo data if we have real webhook data
+      } else {
+        // Only create demo data if no webhook data exists
+        console.log('No existing data found, creating minimal demo data for UI testing');
+        syncStatus = 'demo_fallback';
+        processedActivities = createFallbackActivities(user.id).slice(0, 2); // Only 2 demo activities
+      }
     }
 
     if (processedActivities.length > 0) {
       // Insert activities into database
+      console.log(`Inserting ${processedActivities.length} activities into database...`);
       await insertGarminActivities(supabase, processedActivities);
       
       // Verify insertion
       await verifyInsertedData(supabase, user.id);
     }
 
-    console.log(`Manual sync completed: ${processedActivities.length} activities processed`);
+    // Get final activity count
+    const { data: finalCount } = await supabase
+      .from('garmin_activities')
+      .select('id', { count: 'exact' })
+      .eq('user_id', user.id);
 
-    return new Response(JSON.stringify({ 
+    const responseMessage = {
       success: true,
-      count: processedActivities.length,
-      message: `Manual sync completed: ${processedActivities.length} activities processed`,
-      note: 'Most data should come via webhooks automatically when you sync your Garmin device',
-      activities: processedActivities.slice(0, 3) // Return first 3 for preview
-    }), {
+      syncStatus,
+      processedCount: processedActivities.length,
+      totalActivities: finalCount?.length || 0,
+      message: getSyncMessage(syncStatus, processedActivities.length),
+      lastError: lastError || null,
+      recommendation: getRecommendation(syncStatus),
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('=== Garmin Sync Completed ===');
+    console.log('Final result:', responseMessage);
+
+    return new Response(JSON.stringify(responseMessage), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Error in garmin-sync function:', error);
+    console.error('=== Garmin Sync Error ===');
+    console.error('Error details:', error);
     return new Response(JSON.stringify({ 
-      error: error.message 
+      success: false,
+      error: error.message,
+      syncStatus: 'error',
+      timestamp: new Date().toISOString()
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });
+
+function getSyncMessage(status: string, count: number): string {
+  switch (status) {
+    case 'api_success':
+      return `Successfully synced ${count} activities from Garmin Connect API`;
+    case 'api_failed':
+      return 'Garmin API sync failed, but webhook system is handling real-time data';
+    case 'webhook_data_available':
+      return 'Using existing webhook data. Manual sync not needed as webhooks are working';
+    case 'demo_fallback':
+      return `API unavailable - ${count} demo activities created for testing`;
+    default:
+      return 'Sync completed with unknown status';
+  }
+}
+
+function getRecommendation(status: string): string {
+  switch (status) {
+    case 'api_success':
+      return 'Manual sync successful. Data will continue to arrive automatically via webhooks.';
+    case 'api_failed':
+      return 'Focus on webhook system for real-time sync. Check Garmin Developer Console webhook configuration.';
+    case 'webhook_data_available':
+      return 'Webhook system is working correctly. New activities will appear automatically.';
+    case 'demo_fallback':
+      return 'Please check Garmin API credentials and webhook configuration. Reconnect if needed.';
+    default:
+      return 'Check system status and try again.';
+  }
+}

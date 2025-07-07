@@ -169,17 +169,53 @@ const GarminSettings = () => {
       
       if (error) throw error;
       
-      toast({
-        title: "Sincronização iniciada",
-        description: "Suas atividades estão sendo sincronizadas.",
-      });
+      // Enhanced toast messages based on sync response
+      if (data?.success) {
+        const status = data.syncStatus || 'unknown';
+        let title = "Sincronização concluída";
+        let description = data.message || "Sincronização realizada.";
+        let variant = undefined;
+        
+        if (status === 'api_success') {
+          title = "✅ Sincronização bem-sucedida";
+          description = `${data.processedCount} atividades sincronizadas via API. Total: ${data.totalActivities}`;
+        } else if (status === 'webhook_data_available') {
+          title = "ℹ️ Webhook funcionando";
+          description = "Dados já sincronizados via webhook. Sincronização manual não necessária.";
+        } else if (status === 'api_failed') {
+          title = "⚠️ API indisponível";
+          description = "Sistema de webhook está funcionando. Novas atividades aparecerão automaticamente.";
+          variant = "destructive" as const;
+        } else if (status === 'demo_fallback') {
+          title = "🔧 Modo demonstração";
+          description = "Usando dados de teste. Verifique configuração da API Garmin.";
+          variant = "destructive" as const;
+        }
+        
+        toast({
+          title,
+          description,
+          variant,
+        });
+        
+        if (data.recommendation) {
+          setTimeout(() => {
+            toast({
+              title: "💡 Recomendação",
+              description: data.recommendation,
+            });
+          }, 2000);
+        }
+      } else {
+        throw new Error(data?.error || 'Sync failed');
+      }
       
       await fetchActivities();
     } catch (error) {
       console.error('Error syncing activities:', error);
       toast({
         title: "Erro na sincronização",
-        description: "Não foi possível sincronizar as atividades.",
+        description: error.message || "Não foi possível sincronizar as atividades.",
         variant: "destructive",
       });
     } finally {

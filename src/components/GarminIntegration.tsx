@@ -75,17 +75,36 @@ const GarminIntegration = () => {
       
       if (error) throw error;
       
-      toast({
-        title: "Sincronização manual iniciada",
-        description: `${data.count || 0} atividades processadas. A maioria dos dados chegará via webhooks automaticamente.`,
-      });
+      // Enhanced toast messages based on sync status
+      if (data?.success) {
+        const status = data.syncStatus || 'unknown';
+        let title = "Sincronização concluída";
+        let description = data.message || "Sincronização realizada com sucesso.";
+        
+        if (status === 'api_success') {
+          title = "✅ Sincronização API bem-sucedida";
+        } else if (status === 'webhook_data_available') {
+          title = "ℹ️ Dados do webhook disponíveis";
+        } else if (status === 'api_failed') {
+          title = "⚠️ API falhou, webhook ativo";
+        } else if (status === 'demo_fallback') {
+          title = "🔧 Modo demonstração";
+        }
+        
+        toast({
+          title,
+          description: `${description}${data.recommendation ? ' ' + data.recommendation : ''}`,
+        });
+      } else {
+        throw new Error(data?.error || 'Sync failed');
+      }
       
       await fetchActivities();
     } catch (error) {
       console.error('Error syncing activities:', error);
       toast({
         title: "Erro na sincronização",
-        description: "Não foi possível sincronizar as atividades.",
+        description: error.message || "Não foi possível sincronizar as atividades.",
         variant: "destructive",
       });
     } finally {
