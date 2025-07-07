@@ -46,18 +46,33 @@ const StravaConnectionStatus = ({
 
       <div className="flex items-center space-x-3">
         {!isConnected ? (
-          <Button 
-            onClick={() => {
-              console.log('[StravaConnectionStatus] Button clicked - calling onConnect');
-              console.log('[StravaConnectionStatus] Button state:', { isConnecting, stravaConfig });
-              onConnect();
-            }}
-            disabled={isConnecting || !stravaConfig}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
-          >
-            <ExternalLink className="w-4 h-4 mr-2" />
-            {isConnecting ? 'Conectando...' : !stravaConfig ? 'Carregando configuração...' : 'Conectar ao Strava'}
-          </Button>
+          <>
+            <Button 
+              onClick={() => {
+                console.log('[StravaConnectionStatus] Button clicked - calling onConnect');
+                console.log('[StravaConnectionStatus] Button state:', { isConnecting, stravaConfig });
+                onConnect();
+              }}
+              disabled={isConnecting || !stravaConfig}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              {isConnecting ? 'Conectando...' : !stravaConfig ? 'Carregando configuração...' : 'Conectar ao Strava'}
+            </Button>
+            <Button 
+              onClick={() => {
+                // Force clean all OAuth state and URL
+                localStorage.clear();
+                sessionStorage.clear();
+                window.history.replaceState({}, document.title, window.location.pathname);
+                window.location.reload();
+              }}
+              variant="outline"
+              size="sm"
+            >
+              Reset
+            </Button>
+          </>
         ) : (
           <Button 
             onClick={onSync}
