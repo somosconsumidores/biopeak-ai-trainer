@@ -126,6 +126,11 @@ export const useStravaIntegration = () => {
   };
 
   const handleStravaConnect = () => {
+    console.log('[useStravaIntegration] handleStravaConnect called - checking config:', {
+      hasConfig: !!stravaConfig,
+      config: stravaConfig
+    });
+
     if (!stravaConfig) {
       console.error('[useStravaIntegration] No Strava config available');
       toast.error('Configuração do Strava não carregada. Tente novamente.');
@@ -135,26 +140,38 @@ export const useStravaIntegration = () => {
     console.log('[useStravaIntegration] Starting Strava connection with config:', {
       clientId: stravaConfig.clientId,
       redirectUri: stravaConfig.redirectUri,
-      fallback: stravaConfig.fallback
+      fallback: stravaConfig.fallback,
+      currentUrl: window.location.href
     });
 
     const scope = 'read,activity:read_all';
-    const state = Math.random().toString(36).substring(2, 15); // Add state for security
+    const state = Math.random().toString(36).substring(2, 15);
     const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(stravaConfig.redirectUri)}&approval_prompt=force&scope=${scope}&state=${state}`;
     
-    console.log('[useStravaIntegration] Redirecting to Strava auth URL:', authUrl);
-    console.log('[useStravaIntegration] Setting localStorage strava_connecting = true');
+    console.log('[useStravaIntegration] Generated auth URL:', authUrl);
+    console.log('[useStravaIntegration] About to set localStorage items');
     
     // Store connection state and timestamp
     localStorage.setItem('strava_connecting', 'true');
     localStorage.setItem('strava_connect_time', Date.now().toString());
     localStorage.setItem('strava_state', state);
     
-    // Add a small delay to ensure localStorage is set
+    // Verify localStorage was set
+    console.log('[useStravaIntegration] localStorage verification:', {
+      connecting: localStorage.getItem('strava_connecting'),
+      connectTime: localStorage.getItem('strava_connect_time'),
+      state: localStorage.getItem('strava_state')
+    });
+    
+    // Add a small delay to ensure localStorage is set, then redirect
     setTimeout(() => {
       console.log('[useStravaIntegration] Executing redirect to Strava...');
+      console.log('[useStravaIntegration] Final localStorage check before redirect:', {
+        connecting: localStorage.getItem('strava_connecting'),
+        timestamp: Date.now()
+      });
       window.location.href = authUrl;
-    }, 100);
+    }, 200);
   };
 
   const handleStravaCallback = async (code: string) => {
