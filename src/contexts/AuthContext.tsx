@@ -34,12 +34,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null);
         setLoading(false);
         
-        // Store signup event for redirection
-        if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
-          // Check if this is a new user by checking if we have a flag set during signup
+        // Handle new user redirection
+        if (event === 'SIGNED_IN' && session?.user) {
           const isNewUser = localStorage.getItem('is_new_user') === 'true';
           if (isNewUser) {
-            // Keep the flag for redirect handling
+            localStorage.removeItem('is_new_user');
+            // Use setTimeout to ensure this runs after the component state updates
+            setTimeout(() => {
+              window.location.href = '/strava';
+            }, 100);
           }
         }
       }

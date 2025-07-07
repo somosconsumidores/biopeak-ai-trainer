@@ -22,14 +22,12 @@ const Auth = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
 
-  // Redirect authenticated users - new users go to Strava setup, existing users go to main page
+  // Redirect authenticated users to main page (new users are handled in AuthContext)
   useEffect(() => {
     if (user) {
+      // Only redirect existing users to main page
       const isNewUser = localStorage.getItem('is_new_user') === 'true';
-      if (isNewUser) {
-        localStorage.removeItem('is_new_user');
-        navigate('/strava');
-      } else {
+      if (!isNewUser) {
         navigate('/');
       }
     }
