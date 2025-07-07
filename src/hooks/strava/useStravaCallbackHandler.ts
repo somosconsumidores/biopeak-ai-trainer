@@ -59,8 +59,16 @@ export const useStravaCallbackHandler = ({
       
       toast.error(`Erro na conexão: ${errorMessage}`);
       localStorage.removeItem('strava_connecting');
+      localStorage.removeItem('strava_state');
       setIsConnecting(false);
-      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Clean URL completely
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.delete('code');
+      currentUrl.searchParams.delete('state');
+      currentUrl.searchParams.delete('error');
+      currentUrl.searchParams.delete('error_description');
+      window.history.replaceState({}, document.title, currentUrl.pathname);
       return;
     }
     

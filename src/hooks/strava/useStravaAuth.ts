@@ -38,10 +38,14 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
     localStorage.removeItem('strava_state');
     localStorage.removeItem('strava_connect_time');
     
-    // Clean URL of any existing OAuth parameters
-    window.history.replaceState({}, document.title, window.location.pathname);
+    // Clean URL of any existing OAuth parameters to prevent code reuse
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete('code');
+    currentUrl.searchParams.delete('state');
+    currentUrl.searchParams.delete('scope');
+    window.history.replaceState({}, document.title, currentUrl.pathname);
     
-    console.log('[useStravaAuth] Cleaned previous connection state and URL');
+    console.log('[useStravaAuth] Cleaned previous connection state and URL params');
 
     if (!stravaConfig) {
       console.error('[useStravaAuth] No Strava config available');
