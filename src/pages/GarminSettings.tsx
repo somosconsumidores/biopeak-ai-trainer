@@ -89,19 +89,56 @@ const GarminSettings = () => {
   const connectGarmin = async () => {
     setIsConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('garmin-config');
+      console.log('Starting Garmin connection process...');
       
-      if (error) throw error;
+      // First try the real OAuth 1.0 implementation
+      let { data, error } = await supabase.functions.invoke('garmin-config');
       
-      if (data.authUrl) {
+      // If the real implementation fails, try the fallback
+      if (error || !data?.authUrl) {
+        console.log('Real OAuth failed, trying fallback:', error);
+        toast({
+          title: "Modo Demonstração",
+          description: "Usando dados de demonstração do Garmin. A API real será implementada em produção.",
+        });
+        
+        const fallbackResponse = await supabase.functions.invoke('garmin-config-fallback');
+        data = fallbackResponse.data;
+        error = fallbackResponse.error;
+      }
+      
+      console.log('Garmin config response:', { data, error });
+      
+      if (error) {
+        console.error('Error from garmin functions:', error);
+        throw error;
+      }
+      
+      if (data?.authUrl) {
+        console.log('Redirecting to Garmin auth URL:', data.authUrl);
         localStorage.setItem('garmin_connecting', 'true');
-        window.location.href = data.authUrl;
+        
+        // If it's a demo URL (contains oauth_verifier), handle it directly
+        if (data.authUrl.includes('oauth_verifier=demo_verifier')) {
+          const url = new URL(data.authUrl);
+          const searchParams = new URLSearchParams(url.search);
+          
+          // Simulate the OAuth callback immediately
+          setTimeout(() => {
+            window.history.pushState({}, '', `/garmin?oauth_token=${searchParams.get('oauth_token')}&oauth_verifier=${searchParams.get('oauth_verifier')}`);
+            window.location.reload();
+          }, 1000);
+        } else {
+          window.location.href = data.authUrl;
+        }
+      } else {
+        throw new Error('No authorization URL received from Garmin');
       }
     } catch (error) {
       console.error('Error connecting to Garmin:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível iniciar a conexão com o Garmin Connect.",
+        title: "Erro na conexão",
+        description: error.message || "Não foi possível iniciar a conexão com o Garmin Connect.",
         variant: "destructive",
       });
       setIsConnecting(false);

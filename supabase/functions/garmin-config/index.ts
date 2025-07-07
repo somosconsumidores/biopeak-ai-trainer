@@ -61,33 +61,57 @@ serve(async (req) => {
     const requestTokenUrl = 'https://connectapi.garmin.com/oauth-service/oauth/request_token';
     const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin';
     
+    // Generate OAuth 1.0 parameters
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const nonce = Math.random().toString(36).substring(7);
+    
     const requestTokenParams = {
       oauth_consumer_key: clientId,
-      oauth_nonce: Math.random().toString(36).substring(7),
+      oauth_nonce: nonce,
       oauth_signature_method: 'HMAC-SHA1',
-      oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+      oauth_timestamp: timestamp,
       oauth_version: '1.0',
       oauth_callback: redirectUri
     };
 
-    // Generate signature for request token
-    const requestTokenSignature = await generateSignature('POST', requestTokenUrl, requestTokenParams, clientSecret);
-    requestTokenParams['oauth_signature'] = requestTokenSignature;
+    console.log('OAuth parameters:', requestTokenParams);
+    console.log('Client ID:', clientId);
+    console.log('Request token URL:', requestTokenUrl);
 
-    console.log('Making request token request to Garmin...');
+    // Generate signature for request token
+    try {
+      const requestTokenSignature = await generateSignature('POST', requestTokenUrl, requestTokenParams, clientSecret);
+      requestTokenParams['oauth_signature'] = requestTokenSignature;
+      
+      console.log('Generated signature:', requestTokenSignature);
+      console.log('Making request token request to Garmin...');
+    } catch (signatureError) {
+      console.error('Error generating signature:', signatureError);
+      throw new Error(`Failed to generate OAuth signature: ${signatureError.message}`);
+    }
 
     // Make request token request
     const requestTokenResponse = await fetch(requestTokenUrl, {
       method: 'POST',
       headers: {
         'Authorization': `OAuth ${Object.keys(requestTokenParams).map(key => `${key}="${encodeURIComponent(requestTokenParams[key])}"`).join(', ')}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/x-www-form-urlencoded'
       }
     });
 
+    console.log('Request token response status:', requestTokenResponse.status);
+    console.log('Request token response headers:', Object.fromEntries(requestTokenResponse.headers.entries()));
+
     if (!requestTokenResponse.ok) {
       const errorText = await requestTokenResponse.text();
-      console.error('Request token error:', errorText);
+      console.error('Request token error response:', errorText);
+      
+      // If it's a 401, it's likely a signature issue
+      if (requestTokenResponse.status === 401) {
+        throw new Error(`OAuth signature verification failed. Check your client credentials and signature generation.`);
+      }
+      
       throw new Error(`Failed to get request token: ${requestTokenResponse.status} - ${errorText}`);
     }
 
