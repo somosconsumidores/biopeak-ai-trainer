@@ -329,7 +329,7 @@ export const useStravaIntegration = () => {
     }
   };
 
-  // Check for OAuth callback on component mount
+  // Check for OAuth callback on component mount - MUST be last useEffect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
@@ -371,7 +371,7 @@ export const useStravaIntegration = () => {
       return;
     }
     
-    if (code && isConnecting) {
+    if (code && isConnecting && user) {
       // Validate state parameter for security
       if (state && storedState && state !== storedState) {
         console.error('[useStravaIntegration] State parameter mismatch - possible CSRF attack');
@@ -405,7 +405,7 @@ export const useStravaIntegration = () => {
         }
       }, 2000); // Give some time for potential delayed redirects
     }
-  }, []);
+  }, [user]); // Add user as dependency
 
   return {
     isConnected,
