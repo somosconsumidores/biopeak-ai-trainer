@@ -47,7 +47,11 @@ const StravaConnectionStatus = ({
       <div className="flex items-center space-x-3">
         {!isConnected ? (
           <Button 
-            onClick={onConnect}
+            onClick={() => {
+              console.log('[StravaConnectionStatus] Button clicked - calling onConnect');
+              console.log('[StravaConnectionStatus] Button state:', { isConnecting, stravaConfig });
+              onConnect();
+            }}
             disabled={isConnecting || !stravaConfig}
             className="bg-orange-500 hover:bg-orange-600 text-white"
           >

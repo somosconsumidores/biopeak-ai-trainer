@@ -185,6 +185,11 @@ export const useStravaIntegration = () => {
       try {
         attempt++;
         console.log(`[useStravaIntegration] Attempt ${attempt}/${maxRetries} - Processing Strava callback...`);
+        console.log(`[useStravaIntegration] About to call strava-auth function with:`, {
+          code: code,
+          user: user?.id,
+          hasUser: !!user
+        });
         
         const { data, error } = await supabase.functions.invoke('strava-auth', {
           body: { code },
@@ -197,15 +202,22 @@ export const useStravaIntegration = () => {
           data, 
           error,
           hasData: !!data,
-          hasError: !!error 
+          hasError: !!error,
+          errorDetails: error ? JSON.stringify(error, null, 2) : null
         });
 
         if (error) {
-          console.error(`[useStravaIntegration] Strava auth error (attempt ${attempt}):`, error);
+          console.error(`[useStravaIntegration] Strava auth error (attempt ${attempt}):`, {
+            error,
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorDetails: error.details,
+            fullError: JSON.stringify(error, null, 2)
+          });
           
           // If this is the last attempt, throw the error
           if (attempt === maxRetries) {
-            throw new Error(`Falha na autenticação após ${maxRetries} tentativas: ${error.message || JSON.stringify(error)}`);
+            throw new Error(`Falha na autenticação após ${maxRetries} tentativas: ${error.message || error.details || JSON.stringify(error)}`);
           }
           
           // Wait before retrying (exponential backoff)
@@ -226,7 +238,11 @@ export const useStravaIntegration = () => {
           return; // Success, exit the retry loop
         } else {
           const errorMsg = data?.error || data?.details || 'Resposta inválida do servidor';
-          console.error(`[useStravaIntegration] Strava auth failed (attempt ${attempt}):`, data);
+          console.error(`[useStravaIntegration] Strava auth failed (attempt ${attempt}):`, {
+            data,
+            errorMsg,
+            fullData: JSON.stringify(data, null, 2)
+          });
           
           if (attempt === maxRetries) {
             throw new Error(`Falha na conexão: ${errorMsg}`);
@@ -238,7 +254,12 @@ export const useStravaIntegration = () => {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       } catch (error) {
-        console.error(`[useStravaIntegration] Error on attempt ${attempt}:`, error);
+        console.error(`[useStravaIntegration] Error on attempt ${attempt}:`, {
+          error,
+          errorMessage: error?.message,
+          errorStack: error?.stack,
+          fullError: JSON.stringify(error, null, 2)
+        });
         
         if (attempt === maxRetries) {
           const errorMessage = error?.message || error?.details || 'Erro desconhecido na conexão';
