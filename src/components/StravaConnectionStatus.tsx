@@ -65,9 +65,9 @@ const StravaConnectionStatus = ({
           </Button>
         )}
         
-        {stravaConfig && process.env.NODE_ENV === 'development' && (
-          <div className="text-xs text-muted-foreground mt-2">
-            Debug: Client ID {stravaConfig.clientId}, Redirect: {stravaConfig.redirectUri}
+        {stravaConfig?.fallback && process.env.NODE_ENV === 'development' && (
+          <div className="text-xs text-yellow-400 mt-2">
+            ⚠️ Usando configuração de fallback - Edge function não disponível
           </div>
         )}
       </div>

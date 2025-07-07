@@ -10,10 +10,21 @@ export const useStravaIntegration = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [activities, setActivities] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [stravaConfig, setStravaConfig] = useState<{clientId: string, redirectUri: string, fallback?: boolean} | null>(null);
+  
+  // IMMEDIATE fallback configuration - always available
+  const getDefaultConfig = () => {
+    const isProduction = window.location.hostname === 'biopeak-ai.com';
+    return {
+      clientId: '142473',
+      redirectUri: isProduction ? 'https://biopeak-ai.com/' : `${window.location.origin}/`,
+      fallback: true
+    };
+  };
+
+  const [stravaConfig, setStravaConfig] = useState<{clientId: string, redirectUri: string, fallback?: boolean}>(getDefaultConfig());
 
   useEffect(() => {
+    // Try to load from edge function but don't block UI
     loadStravaConfig();
     if (user) {
       checkStravaConnection();
@@ -21,75 +32,34 @@ export const useStravaIntegration = () => {
     }
   }, [user]);
 
-  const loadStravaConfig = async (retryCount = 0) => {
+  const loadStravaConfig = async () => {
     try {
-      console.log(`[useStravaIntegration] Loading Strava config from edge function... (attempt ${retryCount + 1})`);
+      console.log('[useStravaIntegration] Trying to load enhanced config from edge function...');
       
-      // Production fallback configuration
-      const isProduction = window.location.hostname === 'biopeak-ai.com';
-      const fallbackConfig = {
-        clientId: '142473', // Known Strava client ID for BioPeak
-        redirectUri: isProduction ? 'https://biopeak-ai.com/' : window.location.origin + '/'
-      };
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 5000)
+      );
       
-      const { data, error } = await supabase.functions.invoke('strava-config', {
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const configPromise = supabase.functions.invoke('strava-config', {
+        headers: { 'Content-Type': 'application/json' }
       });
       
-      console.log('[useStravaIntegration] Edge function response:', { data, error, isProduction });
+      const { data, error } = await Promise.race([configPromise, timeoutPromise]) as any;
       
-      if (error) {
-        console.error('[useStravaIntegration] Edge function error:', error);
-        
-        // Retry logic for network failures
-        if (retryCount < 2 && (error.message?.includes('network') || error.message?.includes('fetch'))) {
-          console.log('[useStravaIntegration] Retrying in 2 seconds...');
-          setTimeout(() => loadStravaConfig(retryCount + 1), 2000);
-          return;
-        }
-        
-        // Use fallback for production
-        if (isProduction) {
-          console.log('[useStravaIntegration] Using production fallback config');
-          setStravaConfig(fallbackConfig);
-          return;
-        }
-        
-        toast.error('Erro ao carregar configuração do Strava. Usando configuração de emergência.');
-        setStravaConfig(fallbackConfig);
-        return;
-      }
-      
-      if (data?.clientId) {
-        console.log('[useStravaIntegration] Config loaded successfully from edge function');
-        setStravaConfig({
+      if (!error && data?.clientId) {
+        console.log('[useStravaIntegration] Enhanced config loaded from edge function');
+        setStravaConfig(prev => ({
+          ...prev,
           clientId: data.clientId,
-          redirectUri: data.redirectUri || fallbackConfig.redirectUri
-        });
+          redirectUri: data.redirectUri || prev.redirectUri,
+          fallback: false
+        }));
       } else {
-        console.warn('[useStravaIntegration] No client ID from edge function, using fallback');
-        setStravaConfig(fallbackConfig);
+        console.log('[useStravaIntegration] Edge function failed, keeping default config');
       }
     } catch (error) {
-      console.error('[useStravaIntegration] Exception loading config:', error);
-      
-      // Always provide fallback configuration
-      const isProduction = window.location.hostname === 'biopeak-ai.com';
-      const fallbackConfig = {
-        clientId: '142473',
-        redirectUri: isProduction ? 'https://biopeak-ai.com/' : window.location.origin + '/'
-      };
-      
-      console.log('[useStravaIntegration] Using fallback config due to exception');
-      setStravaConfig(fallbackConfig);
-      
-      if (retryCount === 0) {
-        toast.error('Configuração carregada em modo offline.');
-      }
-    } finally {
-      setLoading(false);
+      console.log('[useStravaIntegration] Edge function call failed, keeping default config:', error.message);
     }
   };
 
@@ -108,8 +78,6 @@ export const useStravaIntegration = () => {
       }
     } catch (error) {
       console.error('Error checking Strava connection:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -235,7 +203,6 @@ export const useStravaIntegration = () => {
     isSyncing,
     isConnecting,
     activities,
-    loading,
     stravaConfig,
     handleStravaConnect,
     handleSync,
