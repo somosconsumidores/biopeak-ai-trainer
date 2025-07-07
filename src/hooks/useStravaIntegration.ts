@@ -197,7 +197,7 @@ export const useStravaIntegration = () => {
         });
         
         const { data, error } = await supabase.functions.invoke('strava-auth', {
-          body: { code },
+          body: JSON.stringify({ code }),
           headers: {
             'Content-Type': 'application/json'
           }
