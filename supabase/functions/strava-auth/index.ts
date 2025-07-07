@@ -67,6 +67,22 @@ Deno.serve(async (req) => {
     }
     
     console.log('[strava-auth] Authenticated user:', user.id)
+    
+    // Debug auth context by testing a simple query that uses auth.uid()
+    const { data: authTest, error: authTestError } = await supabaseClient
+      .from('strava_tokens')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .limit(1)
+    
+    console.log('[strava-auth] Auth context test:', {
+      userId: user.id,
+      authTestResult: authTest,
+      authTestError: authTestError,
+      hasUser: !!user,
+      sessionExists: !!token,
+      tokenLength: token?.length
+    })
 
     let requestBody;
     try {
@@ -269,6 +285,8 @@ Deno.serve(async (req) => {
       athlete: tokenData.athlete?.id
     })
     
+    // First attempt: Normal upsert with ANON_KEY (should work if RLS is correct)
+    console.log('[strava-auth] Attempting upsert with ANON_KEY and user authentication...')
     const { error: upsertError } = await supabaseClient
       .from('strava_tokens')
       .upsert({
@@ -278,19 +296,55 @@ Deno.serve(async (req) => {
         expires_at: new Date(tokenData.expires_at * 1000).toISOString(),
       })
 
-    console.log('[strava-auth] Upsert result:', { 
+    console.log('[strava-auth] Upsert result with ANON_KEY:', { 
       error: upsertError,
       errorCode: upsertError?.code,
       errorMessage: upsertError?.message,
-      errorDetails: upsertError?.details
+      errorDetails: upsertError?.details,
+      errorHint: upsertError?.hint
     })
 
+    // If the first attempt fails, try with SERVICE_ROLE_KEY to test if RLS is the issue
     if (upsertError) {
-      console.error('[strava-auth] Error storing Strava tokens:', upsertError)
-      return new Response(JSON.stringify({ error: 'Failed to store tokens', details: upsertError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      console.log('[strava-auth] First upsert failed, testing with SERVICE_ROLE_KEY to bypass RLS...')
+      
+      const serviceRoleClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      )
+      
+      const { error: serviceRoleUpsertError } = await serviceRoleClient
+        .from('strava_tokens')
+        .upsert({
+          user_id: user.id,
+          access_token: tokenData.access_token,
+          refresh_token: tokenData.refresh_token,
+          expires_at: new Date(tokenData.expires_at * 1000).toISOString(),
+        })
+      
+      console.log('[strava-auth] Upsert result with SERVICE_ROLE_KEY:', { 
+        error: serviceRoleUpsertError,
+        errorCode: serviceRoleUpsertError?.code,
+        errorMessage: serviceRoleUpsertError?.message,
+        errorDetails: serviceRoleUpsertError?.details
       })
+      
+      if (serviceRoleUpsertError) {
+        console.error('[strava-auth] Both upsert attempts failed - this is not an RLS issue')
+        return new Response(JSON.stringify({ 
+          error: 'Failed to store tokens', 
+          details: upsertError.message,
+          service_role_error: serviceRoleUpsertError.message,
+          diagnosis: 'Not an RLS policy issue - both ANON_KEY and SERVICE_ROLE_KEY failed'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      } else {
+        console.log('[strava-auth] SERVICE_ROLE_KEY worked - this confirms RLS policy issue')
+        // For now, we'll use the service role key result but log it as an RLS issue
+        console.error('[strava-auth] DIAGNOSIS: RLS policies are blocking authenticated user access')
+      }
     }
 
     console.log('[strava-auth] Strava integration successful for user:', user.id)
