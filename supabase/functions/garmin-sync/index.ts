@@ -41,26 +41,49 @@ async function generateSignature(method: string, url: string, params: Record<str
 
 // Make authenticated API call to Garmin
 async function makeGarminApiCall(url: string, accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
+  console.log(`Making OAuth 1.0 call to: ${url}`);
+  
   const apiParams = {
     oauth_consumer_key: clientId,
     oauth_token: accessToken,
-    oauth_nonce: Math.random().toString(36).substring(7),
+    oauth_nonce: Math.random().toString(36).substring(2, 15),
     oauth_signature_method: 'HMAC-SHA1',
     oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
     oauth_version: '1.0'
   };
 
-  // Generate signature
+  console.log('OAuth parameters:', { ...apiParams, oauth_signature: '[will be generated]' });
+
+  // Generate signature (exclude oauth_signature from params for signature generation)
   const signature = await generateSignature('GET', url, apiParams, clientSecret, tokenSecret);
-  apiParams['oauth_signature'] = signature;
+  
+  console.log('Generated signature:', signature);
+  
+  // Build authorization header
+  const authParams = {
+    ...apiParams,
+    oauth_signature: signature
+  };
+  
+  const authHeader = 'OAuth ' + Object.keys(authParams)
+    .sort()
+    .map(key => `${key}="${encodeURIComponent(authParams[key])}"`)
+    .join(', ');
+  
+  console.log('Authorization header:', authHeader);
 
   // Make API call
   const response = await fetch(url, {
     method: 'GET',
     headers: {
-      'Authorization': `OAuth ${Object.keys(apiParams).map(key => `${key}="${encodeURIComponent(apiParams[key])}"`).join(', ')}`
+      'Authorization': authHeader,
+      'Accept': 'application/json',
+      'User-Agent': 'GarminConnectApp'
     }
   });
+
+  console.log('Response status:', response.status);
+  console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
   return response;
 }
@@ -112,10 +135,10 @@ serve(async (req) => {
     console.log('Syncing Garmin activities for user:', user.id);
 
     const accessToken = tokenData.access_token;
-    const tokenSecret = tokenData.refresh_token;
+    const tokenSecret = tokenData.refresh_token; // Note: This should be the token_secret from OAuth 1.0
 
-    // Try correct Garmin Health API endpoints with date parameters
-    const baseUrl = 'https://healthapi.garmin.com';
+    // Use correct Garmin Connect API endpoints
+    const baseUrl = 'https://connectapi.garmin.com';
     const today = new Date().toISOString().split('T')[0];
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
@@ -123,14 +146,14 @@ serve(async (req) => {
       `${baseUrl}/wellness-api/rest/activities?fromDate=${thirtyDaysAgo}&toDate=${today}`,
       `${baseUrl}/wellness-api/rest/activities`,
       `${baseUrl}/wellness-api/rest/dailies?fromDate=${thirtyDaysAgo}&toDate=${today}`,
-      `${baseUrl}/wellness-api/rest/summaries?fromDate=${thirtyDaysAgo}&toDate=${today}`,
-      `${baseUrl}/wellness-api/rest/activities/search`
+      `${baseUrl}/activitylist-service/activities/search/activities`,
+      `${baseUrl}/modern/proxy/activitylist-service/activities/search/activities`
     ];
     
     let activitiesData = null;
     let apiError = null;
     
-    console.log('Trying Garmin Health API endpoints...');
+    console.log('Trying Garmin Connect API endpoints...');
     console.log('Using access token:', accessToken ? 'Present' : 'Missing');
     console.log('Using token secret:', tokenSecret ? 'Present' : 'Missing');
     console.log('Using client ID:', clientId ? 'Present' : 'Missing');
