@@ -4,7 +4,7 @@ import StravaConnectionStatus from "./StravaConnectionStatus";
 import StravaActivityList from "./StravaActivityList";
 import StravaDebugPanel from "./StravaDebugPanel";
 import StravaDebugInfo from "./StravaDebugInfo";
-import StreamlinedGarminConnection from "./StreamlinedGarminConnection";
+import GarminIntegration from "./GarminIntegration";
 
 const StravaIntegration = () => {
   const {
@@ -29,9 +29,6 @@ const StravaIntegration = () => {
       />
 
       {isConnected && <StravaActivityList activities={activities} />}
-      
-      {/* Streamlined Garmin Connection */}
-      <StreamlinedGarminConnection />
       
       {/* Debug panels - remover em produção */}
       <StravaDebugPanel />
