@@ -77,30 +77,66 @@ export type Database = {
       garmin_tokens: {
         Row: {
           access_token: string
+          consumer_key: string | null
           created_at: string
           expires_at: string
           id: string
-          refresh_token: string
+          oauth_verifier: string | null
+          token_secret: string
           updated_at: string
           user_id: string
         }
         Insert: {
           access_token: string
+          consumer_key?: string | null
           created_at?: string
           expires_at: string
           id?: string
-          refresh_token: string
+          oauth_verifier?: string | null
+          token_secret: string
           updated_at?: string
           user_id: string
         }
         Update: {
           access_token?: string
+          consumer_key?: string | null
           created_at?: string
           expires_at?: string
           id?: string
-          refresh_token?: string
+          oauth_verifier?: string | null
+          token_secret?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      garmin_webhook_config: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          summary_type: string
+          updated_at: string
+          user_id: string
+          webhook_url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          summary_type: string
+          updated_at?: string
+          user_id: string
+          webhook_url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          summary_type?: string
+          updated_at?: string
+          user_id?: string
+          webhook_url?: string
         }
         Relationships: []
       }

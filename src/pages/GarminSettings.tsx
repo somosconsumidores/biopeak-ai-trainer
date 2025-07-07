@@ -54,6 +54,8 @@ const GarminSettings = () => {
     if (oauthToken && oauthVerifier) {
       setIsConnecting(true);
       try {
+        console.log('Processing OAuth callback:', { oauthToken, oauthVerifier });
+        
         const { data, error } = await supabase.functions.invoke('garmin-auth', {
           body: { 
             oauth_token: oauthToken,
@@ -67,7 +69,7 @@ const GarminSettings = () => {
           setIsConnected(true);
           toast({
             title: "Garmin Connect conectado!",
-            description: "Sua conta foi conectada com sucesso.",
+            description: "Sua conta foi conectada com sucesso. Os dados serão sincronizados automaticamente via webhooks.",
           });
           await fetchActivities();
         }

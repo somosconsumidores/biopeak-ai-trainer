@@ -4,6 +4,7 @@ import StravaConnectionStatus from "./StravaConnectionStatus";
 import StravaActivityList from "./StravaActivityList";
 import StravaDebugPanel from "./StravaDebugPanel";
 import StravaDebugInfo from "./StravaDebugInfo";
+import GarminIntegration from "./GarminIntegration";
 
 const StravaIntegration = () => {
   const {

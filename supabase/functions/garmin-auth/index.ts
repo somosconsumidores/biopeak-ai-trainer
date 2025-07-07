@@ -153,7 +153,9 @@ serve(async (req) => {
       .upsert({
         user_id: user.id,
         access_token: finalAccessToken,
-        refresh_token: finalTokenSecret,
+        token_secret: finalTokenSecret, // Fixed: using correct field name
+        consumer_key: clientId,
+        oauth_verifier: oauth_verifier,
         expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year
       });
 
