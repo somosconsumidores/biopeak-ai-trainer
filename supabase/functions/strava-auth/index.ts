@@ -181,13 +181,19 @@ Deno.serve(async (req) => {
       redirect_uri: redirect_uri
     })
     
+    console.log('[strava-auth] Making token request to Strava...')
+    
     const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify(tokenRequestBody),
     })
+
+    console.log('[strava-auth] Strava token response status:', tokenResponse.status)
+    console.log('[strava-auth] Strava token response headers:', Object.fromEntries(tokenResponse.headers.entries()))
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
@@ -195,11 +201,13 @@ Deno.serve(async (req) => {
         status: tokenResponse.status,
         statusText: tokenResponse.statusText,
         body: errorText,
+        headers: Object.fromEntries(tokenResponse.headers.entries()),
         requestBody: {
           client_id: clientId,
           grant_type: 'authorization_code',
           redirect_uri: redirect_uri,
-          code_preview: code ? `${code.substring(0, 8)}...` : null
+          code_preview: code ? `${code.substring(0, 8)}...${code.substring(code.length - 4)}` : null,
+          code_length: code?.length
         }
       })
       
@@ -209,22 +217,35 @@ Deno.serve(async (req) => {
       
       try {
         const errorJson = JSON.parse(errorText)
+        console.error('[strava-auth] Parsed Strava error:', errorJson)
+        
         if (errorJson.message) {
           errorDetails = errorJson.message
           if (errorJson.message.includes('invalid')) {
             errorMessage = 'Invalid authorization code or expired'
           } else if (errorJson.message.includes('redirect_uri')) {
-            errorMessage = 'Redirect URI mismatch'
+            errorMessage = 'Redirect URI mismatch - check Strava app settings'
+          } else if (errorJson.message.includes('client')) {
+            errorMessage = 'Invalid client credentials'
           }
         }
+        
+        if (errorJson.errors) {
+          errorDetails = `${errorDetails} - Errors: ${JSON.stringify(errorJson.errors)}`
+        }
       } catch (e) {
-        // Keep original error text if not JSON
+        console.warn('[strava-auth] Could not parse Strava error as JSON:', e)
       }
       
       return new Response(JSON.stringify({ 
         error: errorMessage,
         details: errorDetails,
-        strava_status: tokenResponse.status
+        strava_status: tokenResponse.status,
+        debug_info: {
+          client_id: clientId,
+          redirect_uri: redirect_uri,
+          timestamp: new Date().toISOString()
+        }
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

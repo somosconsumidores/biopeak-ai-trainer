@@ -3,36 +3,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
-import { toast } from "sonner";
 import StravaIntegration from "@/components/StravaIntegration";
 
 const StravaSettings = () => {
   const navigate = useNavigate();
 
-  console.log('StravaSettings component loaded');
-
-  // Auto-redirect to preview URL if accessing from project URL
-  useEffect(() => {
-    const currentHost = window.location.hostname;
-    const currentUrl = window.location.href;
-    
-    console.log('[StravaSettings] Current URL:', currentUrl);
-    console.log('[StravaSettings] Current hostname:', currentHost);
-    
-    // If user is on the project URL, redirect to preview URL
-    if (currentHost.includes('f57b9513-c7c3-4577-8f1c-9c357d60d4b2.lovableproject.com')) {
-      const previewUrl = 'https://preview--biopeak-ai-trainer.lovable.app/strava' + window.location.search;
-      console.log('[StravaSettings] Redirecting to preview URL:', previewUrl);
-      
-      toast.info('Redirecionando para URL de integração...', { duration: 2000 });
-      
-      // Use a small delay to show the toast, then redirect
-      setTimeout(() => {
-        window.location.href = previewUrl;
-      }, 1000);
-    }
-  }, []);
+  console.log('[StravaSettings] Component loaded on URL:', window.location.href);
 
   return (
     <div className="min-h-screen bg-background p-6">

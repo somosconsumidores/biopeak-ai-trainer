@@ -38,56 +38,10 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Smart redirect URI logic with environment detection
-    const origin = req.headers.get('origin') || req.headers.get('referer')
-    const host = req.headers.get('host')
-    const forwardedHost = req.headers.get('x-forwarded-host')
+    // Force preview URL for consistent OAuth configuration
+    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava'
     
-    console.log('[strava-config] Request headers:', {
-      origin,
-      host,
-      forwardedHost,
-      userAgent: req.headers.get('user-agent')
-    })
-    
-    let redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava' // Use preview URL that matches Strava app config
-    
-    // Environment detection logic - prioritize preview URL that matches Strava app configuration
-    if (origin && origin.includes('preview--biopeak-ai-trainer.lovable.app')) {
-      redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava'
-      console.log('[strava-config] Using preview environment:', redirectUri)
-    } else if (origin && origin.includes('f57b9513-c7c3-4577-8f1c-9c357d60d4b2.lovableproject.com')) {
-      redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava' // Still use preview URL to match Strava config
-      console.log('[strava-config] Using preview URL for current project environment:', redirectUri)
-    } else if (forwardedHost && forwardedHost.includes('biopeak-ai.com')) {
-      redirectUri = 'https://biopeak-ai.com/strava'
-      console.log('[strava-config] Detected production environment via forwarded host')
-    } else if (host && host.includes('biopeak-ai.com')) {
-      redirectUri = 'https://biopeak-ai.com/strava'
-      console.log('[strava-config] Detected production environment via host')
-    } else if (origin && origin.includes('biopeak-ai.com')) {
-      redirectUri = 'https://biopeak-ai.com/strava'
-      console.log('[strava-config] Detected production environment via origin')
-    } else if (origin) {
-      // For preview, local development or other environments
-      try {
-        const url = new URL(origin)
-        const hostname = url.hostname
-        
-        if (hostname === 'localhost' || hostname.includes('127.0.0.1')) {
-          redirectUri = `${url.origin}/strava`
-          console.log('[strava-config] Using local development environment:', redirectUri)
-        } else if (hostname.includes('lovable.app') || hostname.includes('lovableproject.com')) {
-          redirectUri = `${url.origin}/strava`
-          console.log('[strava-config] Using Lovable environment:', redirectUri)
-        } else {
-          redirectUri = `${url.origin}/strava`
-          console.log('[strava-config] Using other environment:', redirectUri)
-        }
-      } catch (e) {
-        console.warn('[strava-config] Failed to parse origin, using production fallback:', e)
-      }
-    }
+    console.log('[strava-config] Using consistent preview URL for OAuth:', redirectUri)
     
     console.log('[strava-config] Final redirect URI:', redirectUri)
 

@@ -69,8 +69,9 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
     const scope = 'read,activity:read_all';
     const state = Math.random().toString(36).substring(2, 15);
     
-    // IMPORTANTE: Usar approval_prompt=force para garantir nova autorização
-    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(stravaConfig.redirectUri)}&approval_prompt=force&scope=${scope}&state=${state}`;
+    // Force preview URL for consistent OAuth flow
+    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/strava';
+    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&approval_prompt=force&scope=${scope}&state=${state}`;
     
     console.log('[useStravaAuth] Generated auth URL details:', {
       authUrl,
@@ -154,7 +155,7 @@ export const useStravaAuth = (stravaConfig: StravaConfig | null) => {
           },
           body: JSON.stringify({ 
             code,
-            redirect_uri: stravaConfig?.redirectUri 
+            redirect_uri: 'https://preview--biopeak-ai-trainer.lovable.app/strava' 
           })
         });
         
