@@ -42,8 +42,7 @@ const Index = () => {
   }
 
   if (!user) {
-    navigate('/auth');
-    return null;
+    return null; // Let useEffect handle navigation
   }
 
   const renderCurrentView = () => {
