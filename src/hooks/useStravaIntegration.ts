@@ -197,14 +197,24 @@ export const useStravaIntegration = () => {
           bodyData: { code }
         });
         
-        console.log(`[useStravaIntegration] Calling supabase.functions.invoke with body:`, JSON.stringify({ code }));
+        console.log(`[useStravaIntegration] Trying direct fetch instead of supabase.functions.invoke`);
         
-        const { data, error } = await supabase.functions.invoke('strava-auth', {
-          body: { code },
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        const response = await fetch(`https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/strava-auth`, {
+          method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
-          }
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5dG9ya2ptenhzY3lhZWZraG5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3MzM0MTcsImV4cCI6MjA2NzMwOTQxN30.9V0Ir3gtRY3IfiCef7Nu2TKgRczDDYt2Edm1Bo_luAI'
+          },
+          body: JSON.stringify({ code })
         });
+        
+        const result = await response.json();
+        const data = response.ok ? result : null;
+        const error = response.ok ? null : result;
 
         console.log(`[useStravaIntegration] Strava auth response (attempt ${attempt}):`, { 
           data, 
