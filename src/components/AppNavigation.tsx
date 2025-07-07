@@ -64,7 +64,13 @@ const AppNavigation = ({ activeView, onViewChange }: AppNavigationProps) => {
               className={`w-full justify-start h-12 ${isCollapsed ? 'px-3' : 'px-4'} ${
                 isActive ? 'glow' : ''
               }`}
-              onClick={() => onViewChange(item.id)}
+              onClick={() => {
+                if (item.id === 'session') {
+                  navigate('/sessions');
+                } else {
+                  onViewChange(item.id);
+                }
+              }}
             >
               <Icon className="w-5 h-5" />
               {!isCollapsed && <span className="ml-3">{item.label}</span>}

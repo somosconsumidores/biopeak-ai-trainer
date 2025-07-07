@@ -36,7 +36,13 @@ const MobileNavigation = ({ activeView, onViewChange }: MobileNavigationProps) =
                     ? 'bg-primary/20 text-primary border border-primary/30' 
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
-                onClick={() => onViewChange(item.id)}
+                onClick={() => {
+                  if (item.id === 'session') {
+                    navigate('/sessions');
+                  } else {
+                    onViewChange(item.id);
+                  }
+                }}
               >
                 <Icon className={`w-5 h-5 mb-1 ${isActive ? 'animate-pulse' : ''}`} />
                 <span className="text-xs font-medium leading-none">{item.label}</span>
