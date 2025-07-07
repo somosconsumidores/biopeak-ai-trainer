@@ -193,11 +193,14 @@ export const useStravaIntegration = () => {
         console.log(`[useStravaIntegration] About to call strava-auth function with:`, {
           code: code,
           user: user?.id,
-          hasUser: !!user
+          hasUser: !!user,
+          bodyData: { code }
         });
         
+        console.log(`[useStravaIntegration] Calling supabase.functions.invoke with body:`, JSON.stringify({ code }));
+        
         const { data, error } = await supabase.functions.invoke('strava-auth', {
-          body: JSON.stringify({ code }),
+          body: { code },
           headers: {
             'Content-Type': 'application/json'
           }
