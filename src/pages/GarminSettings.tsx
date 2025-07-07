@@ -48,14 +48,17 @@ const GarminSettings = () => {
   };
 
   const handleOAuthCallback = async () => {
-    const code = searchParams.get('code');
-    const state = searchParams.get('state');
+    const oauthToken = searchParams.get('oauth_token');
+    const oauthVerifier = searchParams.get('oauth_verifier');
     
-    if (code && state === 'garmin_auth') {
+    if (oauthToken && oauthVerifier) {
       setIsConnecting(true);
       try {
         const { data, error } = await supabase.functions.invoke('garmin-auth', {
-          body: { code, redirect_uri: `${window.location.origin}/garmin` }
+          body: { 
+            oauth_token: oauthToken,
+            oauth_verifier: oauthVerifier
+          }
         });
 
         if (error) throw error;
