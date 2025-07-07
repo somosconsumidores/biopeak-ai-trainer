@@ -84,11 +84,11 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Mobile Header - only visible on mobile */}
       <MobileHeader />
       
-      <div className="flex min-h-screen">
+      <div className="flex flex-1">
         {/* Desktop Sidebar - hidden on mobile */}
         <AppNavigation activeView={currentView} onViewChange={setCurrentView} />
         
