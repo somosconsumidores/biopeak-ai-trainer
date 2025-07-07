@@ -79,6 +79,12 @@ const TrainingSession = () => {
           <p className="text-muted-foreground">Análise detalhada dos seus treinos do Strava</p>
         </div>
         <div className="flex items-center space-x-3">
+          {processingStravaData && (
+            <div className="flex items-center text-sm text-primary">
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              Processando dados automaticamente...
+            </div>
+          )}
           <Button 
             variant="glass" 
             size="sm"

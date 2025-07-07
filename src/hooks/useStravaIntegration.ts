@@ -162,6 +162,8 @@ export const useStravaIntegration = () => {
         toast.success(`Conectado ao Strava com sucesso! Bem-vindo, ${data.athlete?.firstname || 'Atleta'}!`);
         localStorage.removeItem('strava_connecting');
         
+        // Auto-sync activities after successful connection
+        console.log('[useStravaIntegration] Auto-syncing activities after connection...');
         setTimeout(() => handleSync(), 1000);
       } else {
         console.error('Strava auth failed:', data);
@@ -197,8 +199,19 @@ export const useStravaIntegration = () => {
       }
 
       if (data?.success) {
-        toast.success(`${data.synced} atividades sincronizadas com sucesso!`);
+        const message = `${data.synced} atividades sincronizadas com sucesso!`;
+        toast.success(message);
+        console.log('[useStravaIntegration] Sync completed:', { synced: data.synced, total: data.total });
         loadActivities();
+        
+        // Auto-trigger training session processing if activities were synced
+        if (data.synced > 0) {
+          toast.info('Processando dados de treino automaticamente...');
+          // Dispatch custom event to trigger training session processing
+          window.dispatchEvent(new CustomEvent('strava-activities-synced', { 
+            detail: { synced: data.synced, total: data.total } 
+          }));
+        }
       } else {
         console.error('Strava sync failed:', data);
         throw new Error(data?.error || 'Failed to sync activities');

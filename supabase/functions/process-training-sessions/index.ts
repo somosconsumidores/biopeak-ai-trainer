@@ -70,21 +70,18 @@ Deno.serve(async (req) => {
       })
     }
 
-    console.log('Processing training sessions for user:', user.id)
+    console.log('[process-training-sessions] Starting processing for user:', user.id)
 
     // Get user's Strava activities that haven't been processed yet
     const { data: activities, error: activitiesError } = await supabaseClient
       .from('strava_activities')
       .select('*')
       .eq('user_id', user.id)
-      .not('strava_activity_id', 'in', 
-        `(SELECT strava_activity_id FROM training_sessions WHERE user_id = '${user.id}' AND strava_activity_id IS NOT NULL)`
-      )
       .order('start_date', { ascending: false })
       .limit(20)
 
     if (activitiesError) {
-      console.error('Error fetching activities:', activitiesError)
+      console.error('[process-training-sessions] Error fetching activities:', activitiesError)
       return new Response(JSON.stringify({ error: 'Failed to fetch activities' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -92,6 +89,39 @@ Deno.serve(async (req) => {
     }
 
     if (!activities || activities.length === 0) {
+      console.log('[process-training-sessions] No activities found for user:', user.id)
+      return new Response(JSON.stringify({ 
+        message: 'No activities to process',
+        processed: 0 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Get existing training sessions to avoid duplicates
+    const { data: existingSessions, error: sessionsError } = await supabaseClient
+      .from('training_sessions')
+      .select('strava_activity_id')
+      .eq('user_id', user.id)
+      .not('strava_activity_id', 'is', null)
+
+    if (sessionsError) {
+      console.error('[process-training-sessions] Error fetching existing sessions:', sessionsError)
+      return new Response(JSON.stringify({ error: 'Failed to fetch existing sessions' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Filter out activities that have already been processed
+    const processedActivityIds = new Set(existingSessions?.map(s => s.strava_activity_id) || [])
+    const unprocessedActivities = activities.filter(activity => 
+      !processedActivityIds.has(activity.strava_activity_id)
+    )
+
+    console.log(`[process-training-sessions] Found ${activities.length} total activities, ${unprocessedActivities.length} unprocessed`)
+
+    if (unprocessedActivities.length === 0) {
       return new Response(JSON.stringify({ 
         message: 'No new activities to process',
         processed: 0 
@@ -103,7 +133,7 @@ Deno.serve(async (req) => {
     let processedCount = 0
 
     // Process each activity into a training session
-    for (const activity of activities) {
+    for (const activity of unprocessedActivities) {
       const performanceScore = calculatePerformanceScore(activity)
       const averagePace = calculateAveragePace(activity.distance, activity.moving_time)
       const zonesData = generateZonesData(activity.average_heartrate)
@@ -144,12 +174,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Processed ${processedCount} training sessions for user:`, user.id)
+    console.log(`[process-training-sessions] Successfully processed ${processedCount}/${activities.length} training sessions for user:`, user.id)
 
     return new Response(JSON.stringify({ 
       success: true,
       processed: processedCount,
-      total: activities.length 
+      total: unprocessedActivities.length,
+      skipped: activities.length - unprocessedActivities.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

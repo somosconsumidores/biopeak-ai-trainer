@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     }
 
     // Get user's Strava tokens
-    console.log('Fetching Strava tokens for user:', user.id)
+    console.log('[strava-sync] Fetching Strava tokens for user:', user.id)
     
     const { data: tokenData, error: tokenError } = await supabaseClient
       .from('strava_tokens')
@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch activities from Strava
-    console.log('Fetching activities from Strava...')
+    console.log('[strava-sync] Fetching activities from Strava for user:', user.id)
     const activitiesResponse = await fetch(
       'https://www.strava.com/api/v3/athlete/activities?per_page=50',
       {
@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Synced ${syncedCount} activities for user:`, user.id)
+    console.log(`[strava-sync] Successfully synced ${syncedCount}/${activities.length} activities for user:`, user.id)
 
     return new Response(JSON.stringify({ 
       success: true,

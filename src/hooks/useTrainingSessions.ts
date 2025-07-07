@@ -50,6 +50,7 @@ export function useTrainingSessions() {
         return;
       }
 
+      console.log('[useTrainingSessions] Loaded sessions:', data?.length || 0);
       setSessions(data || []);
     } catch (error) {
       console.error('Error fetching training sessions:', error);
@@ -64,6 +65,8 @@ export function useTrainingSessions() {
 
     setProcessingStravaData(true);
     try {
+      console.log('[useTrainingSessions] Starting Strava data processing...');
+      
       const { data, error } = await supabase.functions.invoke('process-training-sessions', {
         headers: {
           Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
@@ -76,7 +79,9 @@ export function useTrainingSessions() {
         return;
       }
 
-      toast.success(`${data.processed} sessões processadas com sucesso!`);
+      const message = `${data.processed} sessões processadas com sucesso!`;
+      toast.success(message);
+      console.log('[useTrainingSessions] Processing completed:', { processed: data.processed, total: data.total });
       await fetchSessions(); // Refresh the sessions list
     } catch (error) {
       console.error('Error processing Strava data:', error);
@@ -112,6 +117,18 @@ export function useTrainingSessions() {
 
   useEffect(() => {
     fetchSessions();
+    
+    // Listen for custom events from Strava integration
+    const handleStravaSync = () => {
+      console.log('[useTrainingSessions] Received Strava sync event, processing data...');
+      setTimeout(() => processStravaData(), 2000); // Wait a bit for sync to complete
+    };
+    
+    window.addEventListener('strava-activities-synced', handleStravaSync);
+    
+    return () => {
+      window.removeEventListener('strava-activities-synced', handleStravaSync);
+    };
   }, [user]);
 
   return {
