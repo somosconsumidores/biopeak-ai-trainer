@@ -72,31 +72,49 @@ export async function makeGarminApiCall(url: string, accessToken: string, tokenS
   return response;
 }
 
-export function getGarminApiEndpoints() {
+export function getGarminApiEndpoints(downloadAll = false) {
   const baseUrl = 'https://connectapi.garmin.com';
   
   // Convert to UTC timestamps in seconds (official API requirement)
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const uploadStartTime = Math.floor(thirtyDaysAgo.getTime() / 1000);
-  const uploadEndTime = Math.floor(now.getTime() / 1000);
   
-  // Official Garmin Connect API endpoints based on documentation
-  return [
-    // Primary official endpoint with time range parameters
-    `${baseUrl}/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
+  if (downloadAll) {
+    // For historical download, go back 2 years
+    const twoYearsAgo = new Date(now.getTime() - 2 * 365 * 24 * 60 * 60 * 1000);
+    const uploadStartTime = Math.floor(twoYearsAgo.getTime() / 1000);
+    const uploadEndTime = Math.floor(now.getTime() / 1000);
     
-    // Primary endpoint without time range (all activities)
-    `${baseUrl}/rest/activities`,
+    console.log('Downloading ALL historical activities from:', new Date(twoYearsAgo).toISOString());
     
-    // Alternative base URLs to test if connectapi.garmin.com doesn't work
-    `https://connect.garmin.com/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
-    `https://connect.garmin.com/rest/activities`
-  ];
+    return [
+      // Historical download endpoints with extended time range
+      `${baseUrl}/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}&limit=1000`,
+      `${baseUrl}/rest/activities?limit=1000`,
+      `https://connect.garmin.com/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}&limit=1000`,
+      `https://connect.garmin.com/rest/activities?limit=1000`
+    ];
+  } else {
+    // Regular sync - last 30 days
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const uploadStartTime = Math.floor(thirtyDaysAgo.getTime() / 1000);
+    const uploadEndTime = Math.floor(now.getTime() / 1000);
+    
+    return [
+      // Primary official endpoint with time range parameters
+      `${baseUrl}/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      
+      // Primary endpoint without time range (all activities)
+      `${baseUrl}/rest/activities`,
+      
+      // Alternative base URLs to test if connectapi.garmin.com doesn't work
+      `https://connect.garmin.com/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      `https://connect.garmin.com/rest/activities`
+    ];
+  }
 }
 
-export async function fetchGarminActivities(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
-  const apiEndpoints = getGarminApiEndpoints();
+export async function fetchGarminActivities(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string, downloadAll = false) {
+  const apiEndpoints = getGarminApiEndpoints(downloadAll);
   let activitiesData = null;
   let lastError = null;
   

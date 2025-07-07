@@ -16,6 +16,16 @@ serve(async (req) => {
   }
 
   try {
+    // Parse request body if present
+    let requestBody = {};
+    try {
+      const contentType = req.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        requestBody = await req.json();
+      }
+    } catch (e) {
+      // Ignore JSON parsing errors for requests without body
+    }
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const clientId = Deno.env.get('GARMIN_CLIENT_ID')!;
@@ -124,13 +134,18 @@ serve(async (req) => {
       console.log('Demo activities cleaned up successfully');
     }
 
+    // Check if this is a request for downloading all historical activities
+    const downloadAll = requestBody?.downloadAll || false;
+    console.log('Download all historical activities:', downloadAll);
+
     // Try to fetch real activities from Garmin API
     console.log('Attempting to fetch activities from Garmin API...');
     const { activitiesData, lastError } = await fetchGarminActivities(
       accessToken, 
       tokenSecret, 
       clientId, 
-      clientSecret
+      clientSecret,
+      downloadAll
     );
 
     let processedActivities = [];
