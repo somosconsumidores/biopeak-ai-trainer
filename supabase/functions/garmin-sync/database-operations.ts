@@ -1,4 +1,6 @@
-// Database operations for Garmin activities
+// Database operations for Garmin activities and daily health data
+
+// Insert Garmin activities
 export async function insertGarminActivities(supabase: any, activities: any[]) {
   console.log(`Processing ${activities.length} activities for insertion`);
   console.log('Sample activity data:', JSON.stringify(activities[0], null, 2));
@@ -50,21 +52,96 @@ export async function insertGarminActivities(supabase: any, activities: any[]) {
   return insertedData;
 }
 
+// Insert Garmin daily health data
+export async function insertGarminDailyHealth(supabase: any, healthData: any[]) {
+  console.log(`Processing ${healthData.length} daily health records for insertion`);
+  if (healthData.length > 0) {
+    console.log('Sample daily health data:', JSON.stringify(healthData[0], null, 2));
+  }
+
+  // Insert daily health data with better error handling
+  const { data: insertedData, error: insertError } = await supabase
+    .from('garmin_daily_health')
+    .upsert(healthData, { 
+      onConflict: 'user_id,summary_date',
+      ignoreDuplicates: false 
+    })
+    .select();
+
+  if (insertError) {
+    console.error('Error inserting daily health data:', insertError);
+    console.error('Error details:', JSON.stringify(insertError, null, 2));
+    
+    // If upsert fails due to constraint, try individual inserts
+    console.log('Attempting individual daily health inserts as fallback...');
+    let successCount = 0;
+    
+    for (const healthRecord of healthData) {
+      try {
+        const { error: singleError } = await supabase
+          .from('garmin_daily_health')
+          .insert(healthRecord)
+          .select();
+          
+        if (!singleError) {
+          successCount++;
+        } else {
+          console.error(`Failed to insert daily health record ${healthRecord.summary_date}:`, singleError);
+        }
+      } catch (singleInsertError) {
+        console.error(`Exception inserting daily health record ${healthRecord.summary_date}:`, singleInsertError);
+      }
+    }
+    
+    console.log(`Successfully inserted ${successCount} daily health records individually`);
+    
+    if (successCount === 0) {
+      throw new Error(`Failed to insert any daily health data: ${insertError.message}`);
+    }
+  } else {
+    console.log('Successfully upserted daily health data:', insertedData?.length || healthData.length);
+    if (insertedData && insertedData.length > 0) {
+      console.log('Inserted daily health data sample:', JSON.stringify(insertedData[0], null, 2));
+    }
+  }
+
+  return insertedData;
+}
+
 export async function verifyInsertedData(supabase: any, userId: string) {
-  // Verify data was actually inserted
-  const { data: verificationData, error: verificationError } = await supabase
+  // Verify activities were inserted
+  const { data: activityData, error: activityError } = await supabase
     .from('garmin_activities')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(10);
+    .limit(5);
 
-  if (verificationError) {
-    console.error('Error verifying inserted data:', verificationError);
+  // Verify daily health data was inserted
+  const { data: healthData, error: healthError } = await supabase
+    .from('garmin_daily_health')
+    .select('*')
+    .eq('user_id', userId)
+    .order('summary_date', { ascending: false })
+    .limit(5);
+
+  if (activityError) {
+    console.error('Error verifying inserted activity data:', activityError);
   } else {
-    console.log(`Verification: Found ${verificationData?.length || 0} activities in database for user`);
-    console.log('Recent activities:', JSON.stringify(verificationData?.slice(0, 3), null, 2));
+    console.log(`Verification: Found ${activityData?.length || 0} activities in database for user`);
+    if (activityData && activityData.length > 0) {
+      console.log('Recent activities:', JSON.stringify(activityData.slice(0, 2), null, 2));
+    }
   }
 
-  return verificationData;
+  if (healthError) {
+    console.error('Error verifying inserted daily health data:', healthError);
+  } else {
+    console.log(`Verification: Found ${healthData?.length || 0} daily health records in database for user`);
+    if (healthData && healthData.length > 0) {
+      console.log('Recent daily health data:', JSON.stringify(healthData.slice(0, 2), null, 2));
+    }
+  }
+
+  return { activities: activityData, dailyHealth: healthData };
 }

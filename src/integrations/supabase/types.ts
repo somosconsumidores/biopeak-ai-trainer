@@ -74,6 +74,117 @@ export type Database = {
         }
         Relationships: []
       }
+      garmin_activity_details: {
+        Row: {
+          activity_summary: Json | null
+          created_at: string
+          garmin_activity_id: number
+          heart_rate_zones: Json | null
+          id: string
+          location_data: Json | null
+          splits_data: Json | null
+          time_in_zones: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_summary?: Json | null
+          created_at?: string
+          garmin_activity_id: number
+          heart_rate_zones?: Json | null
+          id?: string
+          location_data?: Json | null
+          splits_data?: Json | null
+          time_in_zones?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_summary?: Json | null
+          created_at?: string
+          garmin_activity_id?: number
+          heart_rate_zones?: Json | null
+          id?: string
+          location_data?: Json | null
+          splits_data?: Json | null
+          time_in_zones?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      garmin_daily_health: {
+        Row: {
+          active_time_in_seconds: number | null
+          awake_duration_in_seconds: number | null
+          body_battery_charged: number | null
+          body_battery_drained: number | null
+          calories_burned: number | null
+          created_at: string
+          deep_sleep_duration_in_seconds: number | null
+          distance_in_meters: number | null
+          floors_climbed: number | null
+          id: string
+          light_sleep_duration_in_seconds: number | null
+          moderate_intensity_minutes: number | null
+          rem_sleep_duration_in_seconds: number | null
+          resting_heart_rate: number | null
+          sleep_duration_in_seconds: number | null
+          steps: number | null
+          stress_score: number | null
+          summary_date: string
+          updated_at: string
+          user_id: string
+          vigorous_intensity_minutes: number | null
+        }
+        Insert: {
+          active_time_in_seconds?: number | null
+          awake_duration_in_seconds?: number | null
+          body_battery_charged?: number | null
+          body_battery_drained?: number | null
+          calories_burned?: number | null
+          created_at?: string
+          deep_sleep_duration_in_seconds?: number | null
+          distance_in_meters?: number | null
+          floors_climbed?: number | null
+          id?: string
+          light_sleep_duration_in_seconds?: number | null
+          moderate_intensity_minutes?: number | null
+          rem_sleep_duration_in_seconds?: number | null
+          resting_heart_rate?: number | null
+          sleep_duration_in_seconds?: number | null
+          steps?: number | null
+          stress_score?: number | null
+          summary_date: string
+          updated_at?: string
+          user_id: string
+          vigorous_intensity_minutes?: number | null
+        }
+        Update: {
+          active_time_in_seconds?: number | null
+          awake_duration_in_seconds?: number | null
+          body_battery_charged?: number | null
+          body_battery_drained?: number | null
+          calories_burned?: number | null
+          created_at?: string
+          deep_sleep_duration_in_seconds?: number | null
+          distance_in_meters?: number | null
+          floors_climbed?: number | null
+          id?: string
+          light_sleep_duration_in_seconds?: number | null
+          moderate_intensity_minutes?: number | null
+          rem_sleep_duration_in_seconds?: number | null
+          resting_heart_rate?: number | null
+          sleep_duration_in_seconds?: number | null
+          steps?: number | null
+          stress_score?: number | null
+          summary_date?: string
+          updated_at?: string
+          user_id?: string
+          vigorous_intensity_minutes?: number | null
+        }
+        Relationships: []
+      }
       garmin_tokens: {
         Row: {
           access_token: string

@@ -52,30 +52,77 @@ export function getGarminApiEndpoints() {
   const uploadStartTime = Math.floor(thirtyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
-  // Official Garmin Wellness API endpoints for OAuth 2.0
-  // Based on official Garmin Developer documentation
-  return [
-    // Primary wellness API endpoints (OAuth 2.0)
-    `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
-    `${baseUrl}/wellness-api/rest/activities`,
+  return {
+    // Activity API endpoints (for detailed activities)
+    activities: [
+      `${baseUrl}/activity-service/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      `${baseUrl}/activity-service/rest/activities?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      `${baseUrl}/activity-service/rest/activities`
+    ],
     
-    // Legacy format for compatibility testing
-    `${baseUrl}/wellness-api/rest/activities?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+    // Daily Health Stats API endpoints (for daily health data)
+    dailyHealth: [
+      `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      `${baseUrl}/wellness-api/rest/dailies?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      `${baseUrl}/wellness-api/rest/dailies`
+    ],
     
     // User permissions endpoint (to verify access)
-    `${baseUrl}/wellness-api/rest/user/permissions`
-  ];
+    permissions: `${baseUrl}/wellness-api/rest/user/permissions`
+  };
 }
 
+// Fetch activities from Activity API
 export async function fetchGarminActivities(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
-  const apiEndpoints = getGarminApiEndpoints();
-  let activitiesData = null;
+  const { activities: activityEndpoints } = getGarminApiEndpoints();
+  return await testApiEndpoints('ACTIVITIES', activityEndpoints, accessToken, tokenSecret, clientId, clientSecret);
+}
+
+// Fetch daily health stats from Daily Health Stats API
+export async function fetchGarminDailyHealth(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
+  const { dailyHealth: healthEndpoints } = getGarminApiEndpoints();
+  return await testApiEndpoints('DAILY HEALTH', healthEndpoints, accessToken, tokenSecret, clientId, clientSecret);
+}
+
+// Check user permissions
+export async function checkGarminPermissions(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
+  const { permissions: permissionsEndpoint } = getGarminApiEndpoints();
+  
+  try {
+    console.log('===== CHECKING GARMIN PERMISSIONS =====');
+    const response = await makeGarminApiCall(permissionsEndpoint, accessToken, tokenSecret, clientId, clientSecret);
+    
+    if (response.ok) {
+      const permissions = await response.json();
+      console.log('✅ User permissions:', permissions);
+      return { permissions, error: null };
+    } else {
+      const errorText = await response.text();
+      console.error('❌ Failed to get permissions:', errorText);
+      return { permissions: null, error: `Failed to get permissions: ${response.status}` };
+    }
+  } catch (error) {
+    console.error('💥 Exception checking permissions:', error);
+    return { permissions: null, error: error.message };
+  }
+}
+
+// Generic function to test API endpoints
+async function testApiEndpoints(
+  apiType: string,
+  endpoints: string[],
+  accessToken: string,
+  tokenSecret: string,
+  clientId: string,
+  clientSecret: string
+) {
+  let data = null;
   let lastError = null;
   let attemptedEndpoints = [];
   
-  console.log('===== GARMIN API ENDPOINTS TEST =====');
-  console.log('Total endpoints to test:', apiEndpoints.length);
-  console.log('Endpoints list:', apiEndpoints);
+  console.log(`===== GARMIN ${apiType} API TEST =====`);
+  console.log('Total endpoints to test:', endpoints.length);
+  console.log('Endpoints list:', endpoints);
   console.log('Token validation:', {
     accessToken: accessToken ? `${accessToken.substring(0, 8)}...` : 'Missing',
     tokenSecret: tokenSecret ? `${tokenSecret.substring(0, 8)}...` : 'Missing',
@@ -84,9 +131,9 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
   });
   console.log('======================================');
   
-  for (let i = 0; i < apiEndpoints.length; i++) {
-    const endpoint = apiEndpoints[i];
-    console.log(`\n[${i + 1}/${apiEndpoints.length}] ===== TESTING ENDPOINT =====`);
+  for (let i = 0; i < endpoints.length; i++) {
+    const endpoint = endpoints[i];
+    console.log(`\n[${i + 1}/${endpoints.length}] ===== TESTING ${apiType} ENDPOINT =====`);
     console.log(`Endpoint: ${endpoint}`);
     attemptedEndpoints.push({
       url: endpoint,
@@ -96,117 +143,76 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
     
     try {
       console.log(`🔄 Making OAuth 2.0 Bearer call...`);
-      const activitiesResponse = await makeGarminApiCall(endpoint, accessToken, tokenSecret, clientId, clientSecret);
+      const response = await makeGarminApiCall(endpoint, accessToken, tokenSecret, clientId, clientSecret);
       
       console.log(`📊 Response details:`, {
-        status: activitiesResponse.status,
-        statusText: activitiesResponse.statusText,
-        headers: Object.fromEntries(activitiesResponse.headers.entries()),
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
         url: endpoint
       });
       
-      if (activitiesResponse.ok) {
-        const responseData = await activitiesResponse.json();
-        console.log(`✅ SUCCESS! Working endpoint found: ${endpoint}`);
+      if (response.ok) {
+        const responseData = await response.json();
+        console.log(`✅ SUCCESS! Working ${apiType} endpoint found: ${endpoint}`);
         console.log(`📋 Response preview:`, JSON.stringify(responseData, null, 2).substring(0, 500) + '...');
         
         // Validate response structure
         if (Array.isArray(responseData)) {
-          activitiesData = responseData;
-          console.log(`✅ Found ${responseData.length} activities in array format`);
+          data = responseData;
+          console.log(`✅ Found ${responseData.length} ${apiType.toLowerCase()} items in array format`);
         } else if (responseData && typeof responseData === 'object') {
           // Handle different response formats
-          activitiesData = responseData.activities || responseData.activityList || responseData.data || [responseData];
-          console.log(`✅ Extracted ${activitiesData?.length || 0} activities from object format`);
+          data = responseData.activities || responseData.dailies || responseData.data || [responseData];
+          console.log(`✅ Extracted ${data?.length || 0} ${apiType.toLowerCase()} items from object format`);
           console.log(`📊 Available keys in response:`, Object.keys(responseData));
         } else {
-          console.warn('⚠️ Unexpected response format, treating as single activity');
-          activitiesData = [responseData];
+          console.warn(`⚠️ Unexpected response format for ${apiType}, treating as single item`);
+          data = [responseData];
         }
         
-        console.log(`🏁 SUCCESS SUMMARY: Found ${activitiesData?.length || 0} activities using endpoint ${endpoint}`);
+        console.log(`🏁 SUCCESS SUMMARY: Found ${data?.length || 0} ${apiType.toLowerCase()} items using endpoint ${endpoint}`);
         break;
       } else {
-        const errorText = await activitiesResponse.text();
-        console.error(`❌ ENDPOINT FAILED: ${endpoint}`);
-        console.error(`📊 Error details: Status ${activitiesResponse.status} - ${activitiesResponse.statusText}`);
+        const errorText = await response.text();
+        console.error(`❌ ${apiType} ENDPOINT FAILED: ${endpoint}`);
+        console.error(`📊 Error details: Status ${response.status} - ${response.statusText}`);
         console.error(`📄 Error body preview: ${errorText.substring(0, 300)}${errorText.length > 300 ? '...' : ''}`);
         
-        // Enhanced error categorization with actionable advice
-        if (activitiesResponse.status === 400) {
-          console.error('🔧 Bad Request Analysis:');
-          console.error('  - Possible issue: Invalid OAuth parameters or request format');
-          console.error('  - Check: OAuth signature generation and timestamp format');
-          lastError = `Bad Request (400) on ${endpoint}: ${errorText.substring(0, 150)}...`;
-        } else if (activitiesResponse.status === 401) {
-          console.error('🔐 Unauthorized Analysis:');
-          console.error('  - Possible issue: Expired OAuth 2.0 access token or invalid Bearer token');
-          console.error('  - Check: Token expiration and refresh token usage');
-          lastError = `Unauthorized (401) on ${endpoint}: ${errorText.substring(0, 150)}...`;
-          
-          // For 401 errors, continue testing other endpoints to identify token vs endpoint issues
-          console.log('  - Continuing to test other endpoints to isolate the issue...');
-        } else if (activitiesResponse.status === 403) {
-          console.error('🚫 Forbidden Analysis:');
-          console.error('  - Possible issue: Access denied, insufficient permissions, or app not approved');
-          console.error('  - Check: Garmin Developer Program approval status');
-          lastError = `Forbidden (403) on ${endpoint}: ${errorText.substring(0, 150)}...`;
-        } else if (activitiesResponse.status === 404) {
-          console.error('🔍 Not Found Analysis:');
-          console.error('  - Confirmed: This endpoint does not exist or is deprecated');
-          console.error('  - Action: Moving to next endpoint...');
-          lastError = `Not Found (404) on ${endpoint}: Endpoint deprecated or incorrect`;
-          // Continue testing other endpoints for 404s
-        } else if (activitiesResponse.status === 429) {
-          console.error('⏳ Rate Limited: Stopping endpoint tests to avoid further rate limiting');
-          lastError = `Rate Limited (429): Too many requests`;
-          break; // Stop trying other endpoints
-        } else if (activitiesResponse.status >= 500) {
-          console.error('🚨 Server Error: Garmin service experiencing issues');
-          console.error('  - Action: Will retry with other endpoints');
-          lastError = `Server Error (${activitiesResponse.status}) on ${endpoint}: ${errorText.substring(0, 150)}...`;
-        } else {
-          console.error(`❓ Unexpected Status: ${activitiesResponse.status}`);
-          lastError = `HTTP ${activitiesResponse.status} on ${endpoint}: ${errorText.substring(0, 150)}...`;
-        }
+        lastError = `HTTP ${response.status} on ${endpoint}: ${errorText.substring(0, 150)}...`;
         
-        // Stop early for certain error patterns
-        if (activitiesResponse.status === 429) {
+        // Stop early for rate limiting
+        if (response.status === 429) {
           console.log('🛑 Stopping due to rate limiting');
           break;
         }
       }
     } catch (error) {
-      console.error(`💥 EXCEPTION on endpoint ${endpoint}:`, error);
+      console.error(`💥 EXCEPTION on ${apiType} endpoint ${endpoint}:`, error);
       console.error(`🔍 Exception details:`, {
         message: error.message,
         stack: error.stack?.substring(0, 300),
         type: error.constructor.name
       });
       lastError = `Exception on ${endpoint}: ${error.message}`;
-      
-      // Continue to next endpoint unless it's a systematic issue
-      if (error.message.includes('network') || error.message.includes('timeout')) {
-        console.log('🌐 Network issue detected, continuing to test other endpoints...');
-      }
     }
     
-    console.log(`===== ENDPOINT ${i + 1} COMPLETE =====\n`);
+    console.log(`===== ${apiType} ENDPOINT ${i + 1} COMPLETE =====\n`);
   }
   
   // Final summary
-  console.log('===== FINAL GARMIN API TEST SUMMARY =====');
+  console.log(`===== FINAL GARMIN ${apiType} API TEST SUMMARY =====`);
   console.log('📊 Results:', {
     totalEndpointsTested: attemptedEndpoints.length,
-    successfulActivities: activitiesData?.length || 0,
+    successfulItems: data?.length || 0,
     finalError: lastError,
-    workingEndpoint: activitiesData ? attemptedEndpoints[attemptedEndpoints.length - 1]?.url : 'None'
+    workingEndpoint: data ? attemptedEndpoints[attemptedEndpoints.length - 1]?.url : 'None'
   });
   console.log('📋 All tested endpoints:', attemptedEndpoints.map(e => `${e.attempt}: ${e.url}`));
   console.log('========================================');
   
-  if (!activitiesData) {
-  console.log('❌ All API endpoints failed - no activities retrieved');
+  if (!data) {
+    console.log(`❌ All ${apiType} API endpoints failed - no data retrieved`);
     console.log('🔧 Troubleshooting suggestions:');
     console.log('  1. Verify OAuth 2.0 access token is not expired');
     console.log('  2. Check if Garmin Developer Program access is approved');
@@ -214,5 +220,5 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
     console.log('  4. Confirm user has authorized the application with correct scopes');
   }
 
-  return { activitiesData, lastError, attemptedEndpoints };
+  return { data, lastError, attemptedEndpoints };
 }

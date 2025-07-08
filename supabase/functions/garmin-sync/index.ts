@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
-import { fetchGarminActivities } from './garmin-api.ts';
-import { createFallbackActivities } from './data-processor.ts';
-import { insertGarminActivities, verifyInsertedData } from './database-operations.ts';
+import { fetchGarminActivities, fetchGarminDailyHealth, checkGarminPermissions } from './garmin-api.ts';
+import { processGarminActivities, processDailyHealthData, createFallbackActivities, createFallbackDailyHealth } from './data-processor.ts';
+import { insertGarminActivities, insertGarminDailyHealth, verifyInsertedData } from './database-operations.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -147,93 +147,122 @@ serve(async (req) => {
       console.log('Demo activities cleaned up successfully');
     }
 
-    // Try to fetch real activities from Garmin API
-    console.log('Attempting to fetch activities from Garmin API...');
-    const { activitiesData, lastError } = await fetchGarminActivities(
-      accessToken, 
-      tokenSecret, 
-      clientId, 
-      clientSecret
+    // Check user permissions first
+    console.log('Checking Garmin API permissions...');
+    const { permissions } = await checkGarminPermissions(accessToken, tokenSecret, clientId, clientSecret);
+    
+    // Try to fetch data from both APIs
+    console.log('Attempting to fetch data from both Garmin APIs...');
+    
+    // Fetch activities from Activity API
+    const { data: activitiesData, lastError: activitiesError } = await fetchGarminActivities(
+      accessToken, tokenSecret, clientId, clientSecret
+    );
+    
+    // Fetch daily health data from Daily Health Stats API
+    const { data: healthData, lastError: healthError } = await fetchGarminDailyHealth(
+      accessToken, tokenSecret, clientId, clientSecret
     );
 
     let processedActivities = [];
+    let processedHealthData = [];
     let syncStatus = 'unknown';
+    let lastError = null;
     
+    // Process activities data
     if (activitiesData && Array.isArray(activitiesData) && activitiesData.length > 0) {
-      // Process real data if available
-      console.log(`Processing ${activitiesData.length} real activities from Garmin API`);
-      syncStatus = 'api_success';
-      
-      processedActivities = activitiesData.map((activity: any, index: number) => {
-        // Map official API response fields to our database structure
-        const activityId = activity.activityId || activity.summaryId || (Date.now() + index);
-        
-        return {
-          user_id: user.id,
-          garmin_activity_id: parseInt(activityId.toString()) || (Date.now() + index),
-          name: activity.activityName || `${activity.activityType || 'Activity'} ${index + 1}`,
-          type: (activity.activityType || 'unknown').toLowerCase(),
-          start_date: activity.startTimeInSeconds 
-            ? new Date(activity.startTimeInSeconds * 1000).toISOString() 
-            : new Date().toISOString(),
-          distance: activity.distanceInMeters || null,
-          moving_time: activity.durationInSeconds || null,
-          elapsed_time: activity.durationInSeconds || null,
-          average_speed: activity.averageSpeedInMetersPerSecond || null,
-          max_speed: activity.maxSpeedInMetersPerSecond || null,
-          average_heartrate: activity.averageHeartRateInBeatsPerMinute || null,
-          max_heartrate: activity.maxHeartRateInBeatsPerMinute || null,
-          calories: activity.activeKilocalories || null,
-          total_elevation_gain: activity.totalElevationGainInMeters || null,
-        };
-      });
-    } else {
-      // API failed, check if we should use webhook data instead
-      console.log('Garmin API failed, checking for existing webhook data...');
-      syncStatus = 'api_failed';
+      console.log(`Processing ${activitiesData.length} real activities from Activity API`);
+      processedActivities = processGarminActivities(activitiesData, user.id);
+      syncStatus = 'activity_api_success';
+    } else if (activitiesError) {
+      lastError = activitiesError;
+      console.log('Activity API failed:', activitiesError);
+    }
+    
+    // Process daily health data
+    if (healthData && Array.isArray(healthData) && healthData.length > 0) {
+      console.log(`Processing ${healthData.length} daily health records from Daily Health Stats API`);
+      processedHealthData = processDailyHealthData(healthData, user.id);
+      if (syncStatus === 'activity_api_success') {
+        syncStatus = 'both_apis_success';
+      } else {
+        syncStatus = 'health_api_success';
+      }
+    } else if (healthError) {
+      lastError = lastError || healthError;
+      console.log('Daily Health Stats API failed:', healthError);
+    }
+    
+    // If both APIs failed, check for existing data or create fallback
+    if (processedActivities.length === 0 && processedHealthData.length === 0) {
+      console.log('Both APIs failed, checking for existing data...');
+      syncStatus = 'apis_failed';
       
       const { data: existingActivities } = await supabase
         .from('garmin_activities')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(5);
+        
+      const { data: existingHealth } = await supabase
+        .from('garmin_daily_health')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('summary_date', { ascending: false })
+        .limit(5);
 
-      if (existingActivities && existingActivities.length > 0) {
-        console.log(`Found ${existingActivities.length} existing activities from webhook data`);
+      if ((existingActivities && existingActivities.length > 0) || 
+          (existingHealth && existingHealth.length > 0)) {
+        console.log('Found existing data from webhooks');
         syncStatus = 'webhook_data_available';
-        processedActivities = []; // Don't add demo data if we have real webhook data
       } else {
-        // Only create demo data if no webhook data exists
-        console.log('No existing data found, creating minimal demo data for UI testing');
+        // Create minimal demo data for UI testing
+        console.log('No existing data found, creating demo data for UI testing');
         syncStatus = 'demo_fallback';
-        processedActivities = createFallbackActivities(user.id).slice(0, 2); // Only 2 demo activities
+        processedActivities = createFallbackActivities(user.id).slice(0, 1);
+        processedHealthData = createFallbackDailyHealth(user.id).slice(0, 3);
       }
     }
 
+    // Insert data into database
+    let insertedActivities = 0;
+    let insertedHealthRecords = 0;
+    
     if (processedActivities.length > 0) {
-      // Insert activities into database
       console.log(`Inserting ${processedActivities.length} activities into database...`);
       await insertGarminActivities(supabase, processedActivities);
-      
-      // Verify insertion
+      insertedActivities = processedActivities.length;
+    }
+    
+    if (processedHealthData.length > 0) {
+      console.log(`Inserting ${processedHealthData.length} daily health records into database...`);
+      await insertGarminDailyHealth(supabase, processedHealthData);
+      insertedHealthRecords = processedHealthData.length;
+    }
+    
+    // Verify insertion
+    if (insertedActivities > 0 || insertedHealthRecords > 0) {
       await verifyInsertedData(supabase, user.id);
     }
 
-    // Get final activity count
-    const { data: finalCount } = await supabase
-      .from('garmin_activities')
-      .select('id', { count: 'exact' })
-      .eq('user_id', user.id);
+    // Get final counts
+    const [{ data: activityCount }, { data: healthCount }] = await Promise.all([
+      supabase.from('garmin_activities').select('id', { count: 'exact' }).eq('user_id', user.id),
+      supabase.from('garmin_daily_health').select('id', { count: 'exact' }).eq('user_id', user.id)
+    ]);
 
     const responseMessage = {
       success: true,
       syncStatus,
-      processedCount: processedActivities.length,
-      totalActivities: finalCount?.length || 0,
-      message: getSyncMessage(syncStatus, processedActivities.length),
+      processedActivities: insertedActivities,
+      processedHealthRecords: insertedHealthRecords,
+      totalActivities: activityCount?.length || 0,
+      totalHealthRecords: healthCount?.length || 0,
+      message: getSyncMessage(syncStatus, insertedActivities, insertedHealthRecords),
       lastError: lastError || null,
       recommendation: getRecommendation(syncStatus),
+      permissions: permissions || null,
       timestamp: new Date().toISOString()
     };
 
@@ -259,16 +288,20 @@ serve(async (req) => {
   }
 });
 
-function getSyncMessage(status: string, count: number): string {
+function getSyncMessage(status: string, activityCount: number, healthCount: number = 0): string {
   switch (status) {
-    case 'api_success':
-      return `Successfully synced ${count} activities from Garmin Connect API`;
-    case 'api_failed':
-      return 'Garmin API sync failed, but webhook system is handling real-time data';
+    case 'both_apis_success':
+      return `Successfully synced ${activityCount} activities and ${healthCount} daily health records from both Garmin APIs`;
+    case 'activity_api_success':
+      return `Successfully synced ${activityCount} activities from Garmin Activity API`;
+    case 'health_api_success':
+      return `Successfully synced ${healthCount} daily health records from Garmin Daily Health Stats API`;
+    case 'apis_failed':
+      return 'Both Garmin APIs failed, but webhook system may be handling real-time data';
     case 'webhook_data_available':
       return 'Using existing webhook data. Manual sync not needed as webhooks are working';
     case 'demo_fallback':
-      return `API unavailable - ${count} demo activities created for testing`;
+      return `APIs unavailable - ${activityCount} demo activities and ${healthCount} demo health records created`;
     default:
       return 'Sync completed with unknown status';
   }
@@ -276,14 +309,18 @@ function getSyncMessage(status: string, count: number): string {
 
 function getRecommendation(status: string): string {
   switch (status) {
-    case 'api_success':
-      return 'Manual sync successful. Data will continue to arrive automatically via webhooks.';
-    case 'api_failed':
-      return 'Focus on webhook system for real-time sync. Check Garmin Developer Console webhook configuration.';
+    case 'both_apis_success':
+      return 'Both APIs working perfectly! Data will continue via webhooks.';
+    case 'activity_api_success':
+      return 'Activity API working. Check Daily Health Stats API permissions if health data is needed.';
+    case 'health_api_success':
+      return 'Daily Health Stats API working. Check Activity API permissions if activity data is needed.';
+    case 'apis_failed':
+      return 'Check Garmin API credentials and permissions for both Activity and Daily Health Stats APIs.';
     case 'webhook_data_available':
-      return 'Webhook system is working correctly. New activities will appear automatically.';
+      return 'Webhook system working correctly. New data will appear automatically.';
     case 'demo_fallback':
-      return 'Please check Garmin API credentials and webhook configuration. Reconnect if needed.';
+      return 'Reconnect Garmin account and verify API permissions in Garmin Developer Console.';
     default:
       return 'Check system status and try again.';
   }
