@@ -37,14 +37,27 @@ export const useStravaSync = () => {
     setIsSyncing(true);
     
     try {
-      console.log('Starting Strava sync...');
+      console.log('[useStravaSync] Starting Strava sync...');
+      console.log('[useStravaSync] User:', user?.id);
       
-      const { data, error } = await supabase.functions.invoke('strava-sync');
+      // Get current session for proper authorization
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Sessão não encontrada. Faça login novamente.');
+      }
+      
+      console.log('[useStravaSync] Session token available, calling strava-sync function...');
+      
+      const { data, error } = await supabase.functions.invoke('strava-sync', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
-      console.log('Strava sync response:', { data, error });
+      console.log('[useStravaSync] Strava sync response:', { data, error });
 
       if (error) {
-        console.error('Strava sync error:', error);
+        console.error('[useStravaSync] Strava sync error:', error);
         throw error;
       }
 
@@ -52,7 +65,9 @@ export const useStravaSync = () => {
         const message = `${data.synced} atividades sincronizadas com sucesso!`;
         toast.success(message);
         console.log('[useStravaSync] Sync completed:', { synced: data.synced, total: data.total });
-        loadActivities();
+        
+        // Reload activities from database
+        await loadActivities();
         
         // Auto-trigger training session processing if activities were synced
         if (data.synced > 0) {
@@ -63,12 +78,13 @@ export const useStravaSync = () => {
           }));
         }
       } else {
-        console.error('Strava sync failed:', data);
-        throw new Error(data?.error || 'Failed to sync activities');
+        console.error('[useStravaSync] Strava sync failed:', data);
+        throw new Error(data?.error || 'Falha na sincronização de atividades');
       }
     } catch (error) {
-      console.error('Error syncing Strava activities:', error);
-      toast.error(`Erro ao sincronizar atividades: ${error.message || 'Tente novamente.'}`);
+      console.error('[useStravaSync] Error syncing Strava activities:', error);
+      const errorMessage = error?.message || error?.details || 'Erro desconhecido na sincronização';
+      toast.error(`Erro ao sincronizar atividades: ${errorMessage}`);
     } finally {
       setIsSyncing(false);
     }
