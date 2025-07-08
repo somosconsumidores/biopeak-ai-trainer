@@ -57,15 +57,49 @@ serve(async (req) => {
     const clientId = Deno.env.get('GARMIN_CLIENT_ID');
     const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET');
     
-    console.log('Environment check - Garmin credentials:', {
+    console.log('[garmin-config] ===== CREDENTIAL DIAGNOSTIC =====');
+    console.log('[garmin-config] Environment check - Garmin credentials:', {
       clientId: !!clientId,
-      clientSecret: !!clientSecret
+      clientSecret: !!clientSecret,
+      clientIdLength: clientId?.length || 0,
+      clientSecretLength: clientSecret?.length || 0,
+      clientIdPreview: clientId ? clientId.substring(0, 8) + '...' : 'MISSING',
+      clientSecretPreview: clientSecret ? clientSecret.substring(0, 8) + '...' : 'MISSING'
     });
+    console.log('[garmin-config] Full environment variables check:', {
+      SUPABASE_URL: !!supabaseUrl,
+      SUPABASE_SERVICE_ROLE_KEY: !!supabaseKey,
+      GARMIN_CLIENT_ID: !!clientId,
+      GARMIN_CLIENT_SECRET: !!clientSecret
+    });
+    console.log('[garmin-config] ===============================');
     
     if (!clientId || !clientSecret) {
-      console.error('Missing Garmin credentials');
-      throw new Error('Garmin client credentials not configured - please check GARMIN_CLIENT_ID and GARMIN_CLIENT_SECRET');
+      const missing = [];
+      if (!clientId) missing.push('GARMIN_CLIENT_ID');
+      if (!clientSecret) missing.push('GARMIN_CLIENT_SECRET');
+      
+      console.error('[garmin-config] ===== CREDENTIAL ERROR =====');
+      console.error('[garmin-config] Missing Garmin credentials:', missing);
+      console.error('[garmin-config] This will cause OAuth requests to fail');
+      console.error('[garmin-config] Please configure these secrets in Supabase');
+      console.error('[garmin-config] ============================');
+      
+      throw new Error(`Credenciais do Garmin não configuradas: ${missing.join(', ')}. Configure no painel do Supabase em Settings > Edge Functions.`);
     }
+    
+    // Validate credential format
+    if (clientId.length < 10 || clientSecret.length < 20) {
+      console.error('[garmin-config] ===== CREDENTIAL FORMAT ERROR =====');
+      console.error('[garmin-config] Credentials appear to be invalid format');
+      console.error('[garmin-config] Client ID length:', clientId.length, '(expected > 10)');
+      console.error('[garmin-config] Client Secret length:', clientSecret.length, '(expected > 20)');
+      console.error('[garmin-config] ==============================');
+      
+      throw new Error('Credenciais do Garmin parecem ter formato inválido. Verifique se estão corretas no Garmin Developer Console.');
+    }
+    
+    console.log('[garmin-config] ✅ Credentials appear valid, proceeding with OAuth...');
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 

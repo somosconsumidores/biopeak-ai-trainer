@@ -108,21 +108,8 @@ const GarminSettings = () => {
     try {
       console.log('Starting Garmin connection process...');
       
-      // First try the real OAuth 1.0 implementation
-      let { data, error } = await supabase.functions.invoke('garmin-config');
-      
-      // If the real implementation fails, try the fallback
-      if (error || !data?.authUrl) {
-        console.log('Real OAuth failed, trying fallback:', error);
-        toast({
-          title: "Modo Demonstração",
-          description: "Usando dados de demonstração do Garmin. A API real será implementada em produção.",
-        });
-        
-        const fallbackResponse = await supabase.functions.invoke('garmin-config-fallback');
-        data = fallbackResponse.data;
-        error = fallbackResponse.error;
-      }
+      // Try the real OAuth 1.0 implementation (no fallback)
+      const { data, error } = await supabase.functions.invoke('garmin-config');
       
       console.log('Garmin config response:', { data, error });
       
