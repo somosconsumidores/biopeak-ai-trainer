@@ -74,20 +74,34 @@ const GarminIntegration = () => {
   const connectGarmin = async () => {
     console.log('[GarminIntegration] ===== GARMIN CONNECTION ATTEMPT =====');
     setIsConnecting(true);
+    
+    // Clear any previous toast
+    toast({
+      title: "Iniciando conexão",
+      description: "Configurando autenticação OAuth 2.0 com Garmin...",
+    });
+    
     try {
       console.log('[GarminIntegration] ===== STARTING GARMIN CONNECTION =====');
       console.log('[GarminIntegration] User ID:', user?.id);
+      console.log('[GarminIntegration] Current URL:', window.location.href);
       console.log('[GarminIntegration] Calling garmin-config function...');
       
       // Get current session for proper authorization
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('[GarminIntegration] Session check:', { hasSession: !!session, hasToken: !!session?.access_token });
+      console.log('[GarminIntegration] Session check:', { 
+        hasSession: !!session, 
+        hasToken: !!session?.access_token,
+        userId: session?.user?.id 
+      });
       
       if (!session?.access_token) {
         throw new Error('Sessão não encontrada. Faça login novamente.');
       }
       
       console.log('[GarminIntegration] Making authenticated request to garmin-config...');
+      console.log('[GarminIntegration] Request headers will include Authorization Bearer token');
+      
       const { data, error } = await supabase.functions.invoke('garmin-config', {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
