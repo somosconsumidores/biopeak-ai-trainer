@@ -65,74 +65,79 @@ serve(async (req) => {
 
     // Step 1: Get request token
     const requestTokenUrl = 'https://connectapi.garmin.com/oauth-service/oauth/request_token';
-    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin';
+    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin-settings';
     
-    // Generate OAuth 1.0 parameters
+    // Generate OAuth 1.0 parameters with proper encoding
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const nonce = Math.random().toString(36).substring(7);
+    const nonce = Math.random().toString(36).substring(7) + Date.now().toString(36);
     
     const requestTokenParams = {
+      oauth_callback: redirectUri,
       oauth_consumer_key: clientId,
       oauth_nonce: nonce,
       oauth_signature_method: 'HMAC-SHA1',
       oauth_timestamp: timestamp,
-      oauth_version: '1.0',
-      oauth_callback: redirectUri
+      oauth_version: '1.0'
     };
 
-    console.log('OAuth parameters:', requestTokenParams);
-    console.log('Client ID:', clientId);
-    console.log('Request token URL:', requestTokenUrl);
+    console.log('[garmin-config] OAuth parameters:', { ...requestTokenParams, oauth_consumer_key: '[REDACTED]' });
+    console.log('[garmin-config] Request token URL:', requestTokenUrl);
+    console.log('[garmin-config] Redirect URI:', redirectUri);
 
     // Generate signature for request token
     try {
       const requestTokenSignature = await generateSignature('POST', requestTokenUrl, requestTokenParams, clientSecret);
       requestTokenParams['oauth_signature'] = requestTokenSignature;
       
-      console.log('Generated signature:', requestTokenSignature);
-      console.log('Making request token request to Garmin...');
+      console.log('[garmin-config] OAuth signature generated successfully');
     } catch (signatureError) {
-      console.error('Error generating signature:', signatureError);
+      console.error('[garmin-config] Error generating signature:', signatureError);
       throw new Error(`Failed to generate OAuth signature: ${signatureError.message}`);
     }
 
     // Make request token request
-    console.log('Making request token request to Garmin...');
-    console.log('Request URL:', requestTokenUrl);
-    console.log('OAuth params (without signature):', { ...requestTokenParams, oauth_signature: '[REDACTED]' });
+    console.log('[garmin-config] Making request token request to Garmin...');
+    
+    const authHeader = 'OAuth ' + Object.keys(requestTokenParams)
+      .sort()
+      .map(key => `${key}="${encodeURIComponent(requestTokenParams[key])}"`)
+      .join(', ');
+    
+    console.log('[garmin-config] Authorization header prepared');
     
     const requestTokenResponse = await fetch(requestTokenUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `OAuth ${Object.keys(requestTokenParams).map(key => `${key}="${encodeURIComponent(requestTokenParams[key])}"`).join(', ')}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/x-www-form-urlencoded'
+        'Accept': 'application/x-www-form-urlencoded',
+        'User-Agent': 'BioPeak-Garmin-Integration/1.0'
       }
     });
 
-    console.log('Request token response status:', requestTokenResponse.status);
-    console.log('Request token response headers:', Object.fromEntries(requestTokenResponse.headers.entries()));
-
+    console.log('[garmin-config] Request token response status:', requestTokenResponse.status);
+    
     if (!requestTokenResponse.ok) {
       const errorText = await requestTokenResponse.text();
-      console.error('Request token error response:', errorText);
-      console.error('Full response details:', {
+      console.error('[garmin-config] Request token error response:', errorText);
+      console.error('[garmin-config] Full response details:', {
         status: requestTokenResponse.status,
         statusText: requestTokenResponse.statusText,
         headers: Object.fromEntries(requestTokenResponse.headers.entries())
       });
       
-      // If it's a 401, it's likely a signature issue
+      // Provide more specific error messages
       if (requestTokenResponse.status === 401) {
-        console.error('OAuth signature verification failed - check credentials and signature generation');
-        throw new Error(`OAuth signature verification failed. Status: ${requestTokenResponse.status}. Please verify GARMIN_CLIENT_ID and GARMIN_CLIENT_SECRET are correct.`);
+        throw new Error('Credenciais do Garmin inválidas. Verifique GARMIN_CLIENT_ID e GARMIN_CLIENT_SECRET nas configurações do Supabase.');
+      } else if (requestTokenResponse.status === 400) {
+        throw new Error('Parâmetros OAuth inválidos. Verifique a configuração da aplicação no Garmin Developer Console.');
+      } else {
+        throw new Error(`Erro do Garmin Connect: ${requestTokenResponse.status} ${requestTokenResponse.statusText}`);
       }
-      
-      throw new Error(`Failed to get request token from Garmin: ${requestTokenResponse.status} ${requestTokenResponse.statusText} - ${errorText}`);
     }
 
     const requestTokenData = await requestTokenResponse.text();
-    console.log('Request token response:', requestTokenData);
+    console.log('[garmin-config] Request token response data received:', requestTokenData.length, 'characters');
     
     // Parse response
     const requestTokenParts = new URLSearchParams(requestTokenData);
@@ -140,63 +145,73 @@ serve(async (req) => {
     const oauthTokenSecret = requestTokenParts.get('oauth_token_secret');
 
     if (!oauthToken || !oauthTokenSecret) {
-      console.error('Missing tokens in response:', { oauthToken: !!oauthToken, oauthTokenSecret: !!oauthTokenSecret });
-      console.error('Full response data:', requestTokenData);
-      throw new Error('Invalid request token response - missing oauth_token or oauth_token_secret');
+      console.error('[garmin-config] Missing tokens in response:', { 
+        oauthToken: !!oauthToken, 
+        oauthTokenSecret: !!oauthTokenSecret,
+        responseData: requestTokenData
+      });
+      throw new Error('Resposta inválida do Garmin - tokens OAuth não encontrados');
     }
 
-    console.log('Successfully parsed request tokens');
+    console.log('[garmin-config] Successfully parsed request tokens');
+    
+    // Validate token format (OAuth 1.0 tokens should be non-UUID format)
+    if (oauthToken.includes('-') && oauthToken.length === 36) {
+      console.error('[garmin-config] Received UUID-like token - this indicates a configuration issue');
+      throw new Error('Token inválido recebido do Garmin. Verifique a configuração da aplicação.');
+    }
 
     // Clean up expired tokens first
-    console.log('Cleaning up expired tokens...');
+    console.log('[garmin-config] Cleaning up expired tokens...');
     const { error: cleanupError } = await supabase
       .from('oauth_temp_tokens')
       .delete()
       .lt('expires_at', new Date().toISOString());
     
     if (cleanupError) {
-      console.warn('Failed to cleanup expired tokens:', cleanupError);
+      console.warn('[garmin-config] Failed to cleanup expired tokens:', cleanupError);
     }
 
     // Store request token temporarily in oauth_temp_tokens table
-    console.log('Storing temporary request token...');
+    console.log('[garmin-config] Storing temporary request token...');
     const { error: insertError } = await supabase
       .from('oauth_temp_tokens')
-      .insert({
+      .upsert({
         oauth_token: oauthToken,
         oauth_token_secret: oauthTokenSecret,
-        provider: 'garmin'
+        provider: 'garmin',
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
       });
 
     if (insertError) {
-      console.error('Error storing request token:', insertError);
-      throw new Error(`Failed to store temporary token: ${insertError.message}`);
+      console.error('[garmin-config] Error storing request token:', insertError);
+      throw new Error(`Erro ao armazenar token temporário: ${insertError.message}`);
     }
 
     // Create authorization URL
-    const authUrl = `https://connect.garmin.com/oauthConfirm?oauth_token=${oauthToken}`;
+    const authUrl = `https://connect.garmin.com/oauthConfirm?oauth_token=${encodeURIComponent(oauthToken)}`;
 
-    console.log('Generated Garmin auth URL:', authUrl);
+    console.log('[garmin-config] Generated Garmin auth URL successfully');
+    console.log('[garmin-config] Stored temporary token with 10-minute expiration');
 
     return new Response(JSON.stringify({ 
+      success: true,
       authUrl,
-      requestToken: oauthToken,
-      requestTokenSecret: oauthTokenSecret,
-      webhookUrl: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook',
-      webhookEndpoints: {
-        activities: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook',
-        daily_summary: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook',
-        sleep: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook'
-      },
-      note: 'Configure these webhook endpoints in your Garmin Developer Console'
+      message: 'Token de autorização gerado com sucesso. Redirecionando para o Garmin Connect...',
+      webhookInfo: {
+        url: 'https://qytorkjmzxscyaefkhnk.supabase.co/functions/v1/garmin-webhook',
+        note: 'Configure este URL no Garmin Developer Console para webhooks automáticos'
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Error in garmin-config function:', error);
+    console.error('[garmin-config] Error in garmin-config function:', error);
     return new Response(JSON.stringify({ 
-      error: error.message 
+      success: false,
+      error: error.message,
+      help: 'Se o problema persistir, verifique as credenciais do Garmin no Supabase e a configuração da aplicação no Garmin Developer Console.'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

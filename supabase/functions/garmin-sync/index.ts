@@ -78,13 +78,43 @@ serve(async (req) => {
         hasAccessToken: !!tokenData.access_token,
         hasTokenSecret: !!tokenData.token_secret
       });
-      throw new Error('Invalid Garmin tokens. Please reconnect your Garmin account.');
+      
+      // Clean up invalid tokens
+      await supabase
+        .from('garmin_tokens')
+        .delete()
+        .eq('user_id', user.id);
+      
+      throw new Error('Tokens inválidos do Garmin detectados e removidos. Por favor, conecte novamente sua conta Garmin.');
     }
 
-    // Check for demo/UUID tokens
+    // Check for demo/UUID tokens (these are invalid OAuth 1.0 tokens)
     if (tokenData.access_token.includes('-') && tokenData.access_token.length === 36) {
       console.error('Demo tokens detected - user needs to complete OAuth flow');
-      throw new Error('Demo tokens detected. Please complete the Garmin Connect authorization process.');
+      
+      // Clean up demo tokens
+      await supabase
+        .from('garmin_tokens')
+        .delete()
+        .eq('user_id', user.id);
+      
+      throw new Error('Tokens de demonstração detectados e removidos. Por favor, complete o processo de autorização do Garmin Connect novamente.');
+    }
+
+    // Additional validation for OAuth 1.0 token format
+    if (tokenData.access_token.length < 10 || tokenData.token_secret.length < 10) {
+      console.error('Token format appears invalid:', {
+        accessTokenLength: tokenData.access_token.length,
+        tokenSecretLength: tokenData.token_secret.length
+      });
+      
+      // Clean up invalid format tokens
+      await supabase
+        .from('garmin_tokens')
+        .delete()
+        .eq('user_id', user.id);
+      
+      throw new Error('Formato de token inválido detectado e removido. Por favor, reconecte sua conta Garmin.');
     }
 
     // Check if tokens are expired
@@ -95,17 +125,10 @@ serve(async (req) => {
       throw new Error('Garmin tokens have expired. Please reconnect your Garmin account.');
     }
 
-    // Validate OAuth 1.0 token format (should not look like OAuth 2.0)
-    if (tokenData.access_token.length < 10 || tokenData.token_secret.length < 10) {
-      console.error('Token format appears invalid:', {
-        accessTokenLength: tokenData.access_token.length,
-        tokenSecretLength: tokenData.token_secret.length
-      });
-      throw new Error('Invalid token format. Please reconnect your Garmin account.');
-    }
-
+    // Token validation passed
     console.log('Garmin tokens validated successfully');
     console.log('Token expires at:', tokenData.expires_at);
+
 
     const accessToken = tokenData.access_token;
     const tokenSecret = tokenData.token_secret;

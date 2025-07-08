@@ -25,6 +25,7 @@ const GarminIntegration = () => {
   }, [user]);
 
   const checkGarminConnection = async () => {
+    console.log('[GarminIntegration] Checking Garmin connection for user:', user?.id);
     try {
       const { data, error } = await supabase
         .from('garmin_tokens')
@@ -32,33 +33,74 @@ const GarminIntegration = () => {
         .eq('user_id', user?.id)
         .single();
 
+      console.log('[GarminIntegration] Token check result:', { 
+        hasData: !!data, 
+        error: error?.message,
+        tokenValid: data && !error
+      });
+
       if (data && !error) {
-        setIsConnected(true);
-        await fetchActivities();
-        await checkWebhookStatus();
+        // Validate token format - check if it's a real OAuth token
+        const isValidToken = data.access_token && 
+                           data.token_secret && 
+                           !data.access_token.includes('-') && 
+                           data.access_token.length > 10;
+        
+        if (isValidToken) {
+          console.log('[GarminIntegration] Valid Garmin tokens found');
+          setIsConnected(true);
+          await fetchActivities();
+          await checkWebhookStatus();
+        } else {
+          console.log('[GarminIntegration] Invalid token format detected - cleaning up');
+          // Clean up invalid tokens
+          await supabase
+            .from('garmin_tokens')
+            .delete()
+            .eq('user_id', user?.id);
+          setIsConnected(false);
+        }
+      } else {
+        setIsConnected(false);
       }
     } catch (error) {
-      console.log('No Garmin connection found');
+      console.log('[GarminIntegration] No Garmin connection found:', error);
+      setIsConnected(false);
     } finally {
       setLoading(false);
     }
   };
 
   const connectGarmin = async () => {
+    console.log('[GarminIntegration] ===== GARMIN CONNECTION ATTEMPT =====');
     setIsConnecting(true);
     try {
+      console.log('[GarminIntegration] Calling garmin-config function...');
       const { data, error } = await supabase.functions.invoke('garmin-config');
       
-      if (error) throw error;
+      console.log('[GarminIntegration] Garmin config response:', { data, error });
       
-      if (data?.authUrl) {
-        // Redirect to Garmin OAuth
-        window.location.href = data.authUrl;
+      if (error) {
+        console.error('[GarminIntegration] Garmin config error:', error);
+        throw error;
+      }
+      
+      if (data?.success && data?.authUrl) {
+        console.log('[GarminIntegration] Redirecting to Garmin OAuth...');
+        toast({
+          title: "Redirecionando...",
+          description: "Abrindo página do Garmin Connect para autorização.",
+        });
+        // Small delay to show the toast
+        setTimeout(() => {
+          window.location.href = data.authUrl;
+        }, 500);
       } else {
-        throw new Error('No authorization URL received');
+        console.error('[GarminIntegration] No auth URL in response:', data);
+        throw new Error(data?.error || 'URL de autorização não recebida');
       }
     } catch (error) {
-      console.error('Error connecting to Garmin:', error);
+      console.error('[GarminIntegration] Error connecting to Garmin:', error);
       toast({
         title: "Erro na conexão",
         description: error.message || "Não foi possível conectar com o Garmin Connect.",
@@ -122,17 +164,37 @@ const GarminIntegration = () => {
           description: `${description}${data.recommendation ? ' ' + data.recommendation : ''}`,
         });
       } else {
-        throw new Error(data?.error || 'Sync failed');
+        // Check if it's a token-related error that requires reconnection
+        const errorMessage = data?.error || 'Sync failed';
+        if (errorMessage.includes('conecte novamente') || 
+            errorMessage.includes('reconnect') || 
+            errorMessage.includes('autorização')) {
+          setIsConnected(false);
+          await checkGarminConnection(); // Refresh connection status
+        }
+        throw new Error(errorMessage);
       }
       
       await fetchActivities();
     } catch (error) {
       console.error('Error syncing activities:', error);
+      
+      // Check if error indicates need to reconnect
+      const errorMessage = error.message || "Não foi possível sincronizar as atividades.";
+      const needsReconnection = errorMessage.includes('conecte novamente') || 
+                               errorMessage.includes('reconnect') || 
+                               errorMessage.includes('autorização') ||
+                               errorMessage.includes('tokens');
+      
       toast({
-        title: "Erro na sincronização",
-        description: error.message || "Não foi possível sincronizar as atividades.",
+        title: needsReconnection ? "Reconexão necessária" : "Erro na sincronização",
+        description: errorMessage + (needsReconnection ? " Use o botão 'Conectar ao Garmin' abaixo." : ""),
         variant: "destructive",
       });
+      
+      if (needsReconnection) {
+        setIsConnected(false);
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -243,7 +305,10 @@ const GarminIntegration = () => {
             <div>
               <h3 className="text-lg font-semibold text-foreground">Integração Garmin</h3>
               <p className="text-sm text-muted-foreground">
-                Sincronize suas atividades automaticamente via webhooks
+                {isConnected 
+                  ? "Sincronize suas atividades automaticamente via webhooks" 
+                  : "Conecte sua conta Garmin Connect para sincronizar atividades"
+                }
               </p>
             </div>
           </div>
@@ -253,11 +318,13 @@ const GarminIntegration = () => {
               Conectado
             </Badge>
           ) : (
-            <Badge variant="outline">Não conectado</Badge>
+            <Badge variant="outline" className="border-orange-500/30 text-orange-400">
+              Não conectado
+            </Badge>
           )}
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
           {!isConnected ? (
             <Button 
               onClick={connectGarmin}
@@ -283,6 +350,7 @@ const GarminIntegration = () => {
                 variant="outline"
                 size="sm"
               >
+                <Webhook className="w-4 h-4 mr-2" />
                 Configurar Webhooks
               </Button>
               <Button 
@@ -293,9 +361,18 @@ const GarminIntegration = () => {
                 URLs de Webhook
               </Button>
               <Button 
+                onClick={connectGarmin}
+                variant="outline"
+                size="sm"
+                className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+              >
+                Reconectar
+              </Button>
+              <Button 
                 onClick={disconnectGarmin}
                 variant="outline"
                 size="sm"
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
               >
                 Desconectar
               </Button>
