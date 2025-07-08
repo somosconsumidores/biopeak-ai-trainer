@@ -75,29 +75,45 @@ const GarminIntegration = () => {
     console.log('[GarminIntegration] ===== GARMIN CONNECTION ATTEMPT =====');
     setIsConnecting(true);
     try {
+      console.log('[GarminIntegration] ===== STARTING GARMIN CONNECTION =====');
+      console.log('[GarminIntegration] User ID:', user?.id);
       console.log('[GarminIntegration] Calling garmin-config function...');
       
       // Get current session for proper authorization
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('[GarminIntegration] Session check:', { hasSession: !!session, hasToken: !!session?.access_token });
+      
       if (!session?.access_token) {
         throw new Error('Sessão não encontrada. Faça login novamente.');
       }
       
+      console.log('[GarminIntegration] Making authenticated request to garmin-config...');
       const { data, error } = await supabase.functions.invoke('garmin-config', {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
       
-      console.log('[GarminIntegration] Garmin config response:', { data, error });
+      console.log('[GarminIntegration] ===== RESPONSE FROM GARMIN-CONFIG =====');
+      console.log('[GarminIntegration] Data:', JSON.stringify(data, null, 2));
+      console.log('[GarminIntegration] Error:', JSON.stringify(error, null, 2));
+      console.log('[GarminIntegration] ===========================================');
       
       if (error) {
-        console.error('[GarminIntegration] Garmin config error:', error);
+        console.error('[GarminIntegration] ===== ERROR DETAILS =====');
+        console.error('[GarminIntegration] Error message:', error.message);
+        console.error('[GarminIntegration] Error details:', error.details);
+        console.error('[GarminIntegration] Error hint:', error.hint);
+        console.error('[GarminIntegration] Error code:', error.code);
+        console.error('[GarminIntegration] ========================');
         throw error;
       }
       
       if (data?.success && data?.authUrl) {
-        console.log('[GarminIntegration] Redirecting to Garmin OAuth...');
+        console.log('[GarminIntegration] ===== SUCCESS! REDIRECTING =====');
+        console.log('[GarminIntegration] Auth URL:', data.authUrl);
+        console.log('[GarminIntegration] Full response data:', JSON.stringify(data, null, 2));
+        console.log('[GarminIntegration] ================================');
         toast({
           title: "Redirecionando...",
           description: "Abrindo página do Garmin Connect para autorização.",
@@ -107,11 +123,18 @@ const GarminIntegration = () => {
           window.location.href = data.authUrl;
         }, 500);
       } else {
-        console.error('[GarminIntegration] No auth URL in response:', data);
+        console.error('[GarminIntegration] ===== UNEXPECTED RESPONSE =====');
+        console.error('[GarminIntegration] Data received:', JSON.stringify(data, null, 2));
+        console.error('[GarminIntegration] Expected: success=true and authUrl present');
+        console.error('[GarminIntegration] ================================');
         throw new Error(data?.error || 'URL de autorização não recebida');
       }
     } catch (error) {
-      console.error('[GarminIntegration] Error connecting to Garmin:', error);
+      console.error('[GarminIntegration] ===== FINAL ERROR HANDLER =====');
+      console.error('[GarminIntegration] Caught error:', error);
+      console.error('[GarminIntegration] Error message:', error.message);
+      console.error('[GarminIntegration] Error stack:', error.stack);
+      console.error('[GarminIntegration] ===============================');
       
       // Check if it's a credential error and provide helpful message
       const errorMessage = error.message || "Não foi possível conectar com o Garmin Connect.";
