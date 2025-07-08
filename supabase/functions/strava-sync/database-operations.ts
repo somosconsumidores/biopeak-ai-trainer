@@ -81,7 +81,10 @@ export async function storeActivitiesInDatabase(activities: StravaActivity[], su
       // Store stream data for activities that have it
       for (const activity of batch) {
         if (activity.streams?.heartrate) {
+          console.log(`[strava-sync] Storing stream data for activity ${activity.id}`)
           await storeActivityStreams(activity, serviceRoleClient, userId)
+        } else {
+          console.log(`[strava-sync] No stream data to store for activity ${activity.id}`)
         }
       }
     }
@@ -93,9 +96,20 @@ export async function storeActivitiesInDatabase(activities: StravaActivity[], su
 
 // Helper function to store activity streams data
 async function storeActivityStreams(activity: StravaActivity, supabaseClient: any, userId: string): Promise<void> {
-  if (!activity.streams?.heartrate) return
+  if (!activity.streams?.heartrate) {
+    console.log(`[strava-sync] No heartrate stream data found for activity ${activity.id}`)
+    return
+  }
   
   const heartrate = activity.streams.heartrate
+  
+  console.log(`[strava-sync] Storing heartrate stream for activity ${activity.id}:`, {
+    dataPointsCount: heartrate.data?.length || 0,
+    originalSize: heartrate.original_size,
+    resolution: heartrate.resolution,
+    seriesType: heartrate.series_type,
+    sampleData: heartrate.data?.slice(0, 5) || []
+  })
   
   try {
     const { error } = await supabaseClient
@@ -115,7 +129,7 @@ async function storeActivityStreams(activity: StravaActivity, supabaseClient: an
     if (error) {
       console.error(`[strava-sync] Error saving stream data for activity ${activity.id}:`, error)
     } else {
-      console.log(`[strava-sync] Heart rate stream data saved for activity ${activity.id}`)
+      console.log(`[strava-sync] Heart rate stream data saved successfully for activity ${activity.id} (${heartrate.data?.length || 0} data points)`)
     }
   } catch (error) {
     console.error(`[strava-sync] Error storing streams for activity ${activity.id}:`, error)

@@ -25,6 +25,38 @@ export interface StravaActivityStreams {
   }
 }
 
+// Helper function to verify token scopes
+export async function verifyTokenScopes(accessToken: string): Promise<{ scopes: string[], athlete: any }> {
+  try {
+    console.log('[strava-sync] Verifying token scopes...')
+    
+    const response = await fetch('https://www.strava.com/api/v3/athlete', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Failed to verify token: ${response.status}`)
+    }
+    
+    const athlete = await response.json()
+    const scopes = response.headers.get('X-RateLimit-Usage')?.split(',') || []
+    
+    console.log('[strava-sync] Token verification successful:', {
+      athleteId: athlete.id,
+      athleteName: athlete.firstname + ' ' + athlete.lastname,
+      scopes: scopes,
+      hasHeartRateAccess: scopes.includes('read_all') || scopes.includes('read')
+    })
+    
+    return { scopes, athlete }
+  } catch (error) {
+    console.error('[strava-sync] Error verifying token:', error)
+    throw error
+  }
+}
+
 // Helper function to fetch activities from Strava API with incremental sync
 export async function fetchStravaActivities(accessToken: string, lastSyncDate: Date | null): Promise<StravaActivity[]> {
   console.log('[strava-sync] Fetching activities from Strava API...')
@@ -84,58 +116,67 @@ export async function fetchStravaActivities(accessToken: string, lastSyncDate: D
   return activities
 }
 
-// Helper function to fetch activity streams (heart rate data)
-export async function fetchActivityStreams(activityId: number, accessToken: string): Promise<StravaActivityStreams | null> {
-  try {
-    const response = await fetch(
-      `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=heartrate&key_by_type=true`,
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
+// Helper function to fetch activity streams (heart rate data) with retry logic
+export async function fetchActivityStreams(activityId: number, accessToken: string, retryCount: number = 3): Promise<StravaActivityStreams | null> {
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
+    try {
+      console.log(`[strava-sync] Fetching streams for activity ${activityId} (attempt ${attempt}/${retryCount})`)
+      
+      const response = await fetch(
+        `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=heartrate&key_by_type=true`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        }
+      )
+      
+      if (response.ok) {
+        const streamData = await response.json()
+        console.log(`[strava-sync] Successfully fetched streams for activity ${activityId}:`, {
+          hasHeartrate: !!streamData.heartrate,
+          heartrateDataPoints: streamData.heartrate?.data?.length || 0,
+          streamKeys: Object.keys(streamData || {})
+        })
+        return streamData
+      } else if (response.status === 404) {
+        console.log(`[strava-sync] No streams available for activity ${activityId} (404)`)
+        return null
+      } else if (response.status === 429) {
+        console.log(`[strava-sync] Rate limited for activity ${activityId}, waiting before retry...`)
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt)) // Exponential backoff
+        continue
+      } else {
+        console.log(`[strava-sync] Failed to fetch streams for activity ${activityId}, status: ${response.status}`)
+        if (attempt === retryCount) return null
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
       }
-    )
-    
-    if (response.ok) {
-      const streamData = await response.json()
-      return streamData
-    } else {
-      console.log(`[strava-sync] No streams available for activity ${activityId}`)
-      return null
+    } catch (error) {
+      console.error(`[strava-sync] Error fetching streams for activity ${activityId} (attempt ${attempt}):`, error)
+      if (attempt === retryCount) return null
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
     }
-  } catch (error) {
-    console.error(`[strava-sync] Error fetching streams for activity ${activityId}:`, error)
-    return null
   }
+  return null
 }
 
 // Helper function to fetch detailed activity data
 export async function fetchDetailedActivityData(activities: StravaActivity[], accessToken: string): Promise<{ detailedActivities: StravaActivity[], detailRequestCount: number }> {
-  console.log('[strava-sync] Starting optimized detailed data fetch...')
+  console.log('[strava-sync] Starting detailed data fetch with enhanced logging...')
   
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
   const detailedActivities: StravaActivity[] = []
   let detailRequestCount = 0
   
-  // Sort activities by date (most recent first) and limit to 50 for detailed processing
+  // Sort activities by date (most recent first) and increase limit to 200 for better coverage
   const sortedActivities = activities.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
-  const maxDetailedActivities = 50
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const maxDetailedActivities = 200 // Increased from 50
   
-  // Prioritize recent activities (last 30 days)
-  const recentActivities = sortedActivities.filter(activity => 
-    new Date(activity.start_date) >= thirtyDaysAgo
-  ).slice(0, maxDetailedActivities)
+  // Remove 30-day limitation - process all activities up to the limit
+  const activitiesToProcess = sortedActivities.slice(0, maxDetailedActivities)
   
-  // Add older activities up to the limit
-  const olderActivities = sortedActivities.filter(activity => 
-    new Date(activity.start_date) < thirtyDaysAgo
-  ).slice(0, Math.max(0, maxDetailedActivities - recentActivities.length))
-  
-  const activitiesToProcess = [...recentActivities, ...olderActivities].slice(0, maxDetailedActivities)
-  
-  console.log(`[strava-sync] Processing detailed data for ${activitiesToProcess.length} activities (${recentActivities.length} recent, ${olderActivities.length} older)`)
+  console.log(`[strava-sync] Processing detailed data for ${activitiesToProcess.length} activities (no date filtering applied)`)
+  console.log(`[strava-sync] Sample activities to process:`, activitiesToProcess.slice(0, 3).map(a => ({ id: a.id, name: a.name, type: a.type, start_date: a.start_date })))
   
   // Track execution time to prevent timeouts
   const startTime = Date.now()
@@ -152,16 +193,10 @@ export async function fetchDetailedActivityData(activities: StravaActivity[], ac
       break
     }
     
-    // Check if we already have detailed data (heart rate or calories)
-    if (activity.average_heartrate || activity.calories) {
-      console.log(`[strava-sync] Activity ${activity.id} already has detailed data, skipping`)
-      detailedActivities.push(activity)
-      continue
-    }
+    // Always process activities to ensure we get detailed data - remove the skip logic
+    console.log(`[strava-sync] Processing activity ${activity.id} (${i + 1}/${activitiesToProcess.length}) - ${activity.name} (${activity.type})`)
     
     try {
-      console.log(`[strava-sync] Fetching detailed data for activity ${activity.id} (${i + 1}/${activitiesToProcess.length})`)
-      
       // Reduced delay to 1 second to speed up processing
       if (detailRequestCount > 0) {
         await delay(1000) // 1 second delay between detailed requests
@@ -180,9 +215,20 @@ export async function fetchDetailedActivityData(activities: StravaActivity[], ac
       
       if (detailResponse.ok) {
         const detailedActivity = await detailResponse.json()
-        console.log(`[strava-sync] Got detailed data for activity ${activity.id} - HR: ${detailedActivity.average_heartrate}, Calories: ${detailedActivity.calories}`)
         
-        // Fetch stream data (heart rate time-series)
+        // Log detailed information about the response
+        console.log(`[strava-sync] Detailed activity ${activity.id} response:`, {
+          has_heartrate: !!detailedActivity.has_heartrate,
+          average_heartrate: detailedActivity.average_heartrate,
+          max_heartrate: detailedActivity.max_heartrate,
+          calories: detailedActivity.calories,
+          device_name: detailedActivity.device_name,
+          has_kudosed: detailedActivity.has_kudosed,
+          workout_type: detailedActivity.workout_type
+        })
+        
+        // Fetch stream data (heart rate time-series) - always attempt this
+        console.log(`[strava-sync] Attempting to fetch stream data for activity ${activity.id}`)
         const streamData = await fetchActivityStreams(activity.id, accessToken)
         
         // Merge detailed data with basic activity data
@@ -194,9 +240,18 @@ export async function fetchDetailedActivityData(activities: StravaActivity[], ac
           streams: streamData
         }
         
+        console.log(`[strava-sync] Final enriched activity ${activity.id}:`, {
+          final_average_heartrate: enrichedActivity.average_heartrate,
+          final_max_heartrate: enrichedActivity.max_heartrate,
+          final_calories: enrichedActivity.calories,
+          has_streams: !!enrichedActivity.streams,
+          stream_heartrate_points: enrichedActivity.streams?.heartrate?.data?.length || 0
+        })
+        
         detailedActivities.push(enrichedActivity)
       } else {
-        console.warn(`[strava-sync] Failed to fetch detailed data for activity ${activity.id}, status: ${detailResponse.status}`)
+        const errorText = await detailResponse.text()
+        console.error(`[strava-sync] Failed to fetch detailed data for activity ${activity.id}, status: ${detailResponse.status}, error: ${errorText}`)
         detailedActivities.push(activity) // Keep original data
       }
       

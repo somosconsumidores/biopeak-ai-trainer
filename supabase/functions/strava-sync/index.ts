@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { ensureValidAccessToken } from './token-management.ts'
 import { getLastSyncInfo, updateSyncStatus } from './sync-status.ts'
-import { fetchStravaActivities, fetchDetailedActivityData } from './strava-api.ts'
+import { fetchStravaActivities, fetchDetailedActivityData, verifyTokenScopes } from './strava-api.ts'
 import { storeActivitiesInDatabase } from './database-operations.ts'
 
 const corsHeaders = {
@@ -85,6 +85,11 @@ Deno.serve(async (req) => {
     const accessToken = await ensureValidAccessToken(serviceRoleClient, user.id)
     console.log('[strava-sync] Access token obtained successfully')
 
+    // Verify token scopes and capabilities
+    console.log('[strava-sync] Verifying token scopes...')
+    const { scopes, athlete } = await verifyTokenScopes(accessToken)
+    console.log('[strava-sync] Token verification completed for athlete:', athlete.firstname)
+
     // Fetch activities from Strava using helper function with incremental sync
     console.log('[strava-sync] Fetching activities from Strava API...')
     const activities = await fetchStravaActivities(accessToken, lastSyncDate)
@@ -117,8 +122,13 @@ Deno.serve(async (req) => {
 
     console.log(`[strava-sync] Successfully synced ${syncedCount}/${detailedActivities.length} activities for user:`, user.id)
     
-    // Log detailed sync results
-    console.log('[strava-sync] Sync summary:', {
+    // Log detailed sync results with heart rate analysis
+    const activitiesWithHR = detailedActivities.filter(a => a.average_heartrate && a.average_heartrate > 0)
+    const activitiesWithMaxHR = detailedActivities.filter(a => a.max_heartrate && a.max_heartrate > 0)
+    const activitiesWithStreams = detailedActivities.filter(a => a.streams?.heartrate)
+    const activitiesWithCalories = detailedActivities.filter(a => a.calories && a.calories > 0)
+    
+    console.log('[strava-sync] Detailed sync summary:', {
       userId: user.id,
       totalActivitiesFromStrava: detailedActivities.length,
       activitiesSyncedToDatabase: syncedCount,
@@ -126,8 +136,28 @@ Deno.serve(async (req) => {
       isIncrementalSync: !!lastSyncDate,
       lastSyncDate: lastSyncDate?.toISOString(),
       mostRecentActivityDate: mostRecentActivity.toISOString(),
-      detailRequestsMade: detailRequestCount
+      detailRequestsMade: detailRequestCount,
+      heartRateAnalysis: {
+        withAverageHR: activitiesWithHR.length,
+        withMaxHR: activitiesWithMaxHR.length,
+        withStreamData: activitiesWithStreams.length,
+        withCalories: activitiesWithCalories.length,
+        totalStreamDataPoints: activitiesWithStreams.reduce((sum, a) => sum + (a.streams?.heartrate?.data?.length || 0), 0)
+      }
     })
+    
+    if (activitiesWithHR.length > 0) {
+      console.log('[strava-sync] Sample activities with heart rate data:', activitiesWithHR.slice(0, 3).map(a => ({
+        id: a.id,
+        name: a.name,
+        avgHR: a.average_heartrate,
+        maxHR: a.max_heartrate,
+        hasStreams: !!a.streams?.heartrate,
+        streamPoints: a.streams?.heartrate?.data?.length || 0
+      })))
+    } else {
+      console.log('[strava-sync] WARNING: No activities found with heart rate data!')
+    }
 
     return new Response(JSON.stringify({ 
       success: true,
