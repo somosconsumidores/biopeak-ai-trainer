@@ -52,6 +52,7 @@ const StravaConnectionStatus = ({
                 console.log('[StravaConnectionStatus] ===== STRAVA CONNECTION ATTEMPT =====');
                 console.log('[StravaConnectionStatus] Button clicked - calling onConnect');
                 console.log('[StravaConnectionStatus] Button state:', { 
+                  isConnected,
                   isConnecting, 
                   hasStravaConfig: !!stravaConfig,
                   stravaConfig,
@@ -106,7 +107,16 @@ const StravaConnectionStatus = ({
           </>
         ) : (
           <Button 
-            onClick={onSync}
+            onClick={() => {
+              console.log('[StravaConnectionStatus] ===== STRAVA SYNC ATTEMPT =====');
+              console.log('[StravaConnectionStatus] Sync button clicked');
+              console.log('[StravaConnectionStatus] Current state:', {
+                isConnected,
+                isSyncing,
+                hasConfig: !!stravaConfig
+              });
+              onSync();
+            }}
             disabled={isSyncing}
             variant="glass"
           >
