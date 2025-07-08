@@ -12,7 +12,7 @@ export const useStravaIntegration = () => {
   
   // Initialize all hooks in consistent order
   const { stravaConfig } = useStravaConfig();
-  const { isSyncing, activities, loadActivities, handleSync } = useStravaSync();
+  const { isSyncing, activities, syncStatus, loadActivities, loadSyncStatus, handleSync } = useStravaSync();
   const { 
     isConnected, 
     isConnecting, 
@@ -38,6 +38,7 @@ export const useStravaIntegration = () => {
       console.log('[useStravaIntegration] User authenticated, checking Strava connection...');
       checkStravaConnection();
       loadActivities();
+      loadSyncStatus();
     }
   }, [user]);
 
@@ -48,6 +49,7 @@ export const useStravaIntegration = () => {
     isSyncing,
     isConnecting,
     activities,
+    syncStatus,
     stravaConfig,
     handleStravaConnect,
     handleSync: handleSyncWrapper,

@@ -269,6 +269,42 @@ export type Database = {
         }
         Relationships: []
       }
+      strava_sync_status: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          last_activity_date: string | null
+          last_sync_at: string
+          sync_status: string | null
+          total_activities_synced: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_activity_date?: string | null
+          last_sync_at?: string
+          sync_status?: string | null
+          total_activities_synced?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_activity_date?: string | null
+          last_sync_at?: string
+          sync_status?: string | null
+          total_activities_synced?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       strava_tokens: {
         Row: {
           access_token: string

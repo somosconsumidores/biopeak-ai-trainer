@@ -40,60 +40,37 @@ interface SyncResult {
   }
 }
 
-// Helper function to get user's Strava tokens with RLS fallback
-async function getStravaTokens(supabaseClient: any, serviceRoleClient: any, userId: string): Promise<{ tokenData: StravaTokenData | null, usingServiceRole: boolean }> {
+// Helper function to get user's Strava tokens
+async function getStravaTokens(supabaseClient: any, userId: string): Promise<StravaTokenData> {
   console.log('[strava-sync] Fetching Strava tokens for user:', userId)
   
-  // First attempt: Try with ANON_KEY and authenticated user context
-  let { data: tokenData, error: tokenError } = await supabaseClient
+  const { data: tokenData, error: tokenError } = await supabaseClient
     .from('strava_tokens')
     .select('*')
     .eq('user_id', userId)
     .maybeSingle()
 
-  console.log('[strava-sync] Token fetch with ANON_KEY:', {
+  console.log('[strava-sync] Token fetch result:', {
     hasTokenData: !!tokenData,
     tokenError: tokenError,
     userId: userId
   })
 
-  let usingServiceRole = false
-
-  // If RLS blocks access, try with SERVICE_ROLE_KEY
-  if (tokenError || !tokenData) {
-    console.log('[strava-sync] Attempting token fetch with SERVICE_ROLE_KEY to bypass RLS...')
-    
-    const { data: serviceTokenData, error: serviceTokenError } = await serviceRoleClient
-      .from('strava_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle()
-    
-    console.log('[strava-sync] Token fetch with SERVICE_ROLE_KEY:', {
-      hasServiceTokenData: !!serviceTokenData,
-      serviceTokenError: serviceTokenError
-    })
-    
-    if (serviceTokenError) {
-      console.error('[strava-sync] Error fetching Strava tokens even with SERVICE_ROLE_KEY:', serviceTokenError)
-      throw new Error('Error fetching Strava connection')
-    }
-    
-    if (!serviceTokenData) {
-      console.log('[strava-sync] No Strava tokens found for user:', userId)
-      throw new Error('Strava not connected')
-    }
-    
-    tokenData = serviceTokenData
-    usingServiceRole = true
-    console.log('[strava-sync] Using SERVICE_ROLE_KEY tokens - RLS issue confirmed for strava_tokens table')
+  if (tokenError) {
+    console.error('[strava-sync] Error fetching Strava tokens:', tokenError)
+    throw new Error('Error fetching Strava connection')
+  }
+  
+  if (!tokenData) {
+    console.log('[strava-sync] No Strava tokens found for user:', userId)
+    throw new Error('Strava not connected')
   }
 
-  return { tokenData, usingServiceRole }
+  return tokenData
 }
 
 // Helper function to refresh expired Strava tokens
-async function refreshStravaToken(tokenData: StravaTokenData, supabaseClient: any, serviceRoleClient: any, userId: string, usingServiceRole: boolean): Promise<string> {
+async function refreshStravaToken(tokenData: StravaTokenData, supabaseClient: any, userId: string): Promise<string> {
   console.log('Token expired, refreshing...')
   
   const refreshResponse = await fetch('https://www.strava.com/oauth/token', {
@@ -120,9 +97,8 @@ async function refreshStravaToken(tokenData: StravaTokenData, supabaseClient: an
 
   const refreshData = await refreshResponse.json()
 
-  // Update tokens in database - use SERVICE_ROLE_KEY if we had RLS issues
-  const updateClient = usingServiceRole ? serviceRoleClient : supabaseClient
-  const { error: updateError } = await updateClient
+  // Update tokens in database
+  const { error: updateError } = await supabaseClient
     .from('strava_tokens')
     .update({
       access_token: refreshData.access_token,
@@ -138,54 +114,92 @@ async function refreshStravaToken(tokenData: StravaTokenData, supabaseClient: an
   return refreshData.access_token
 }
 
-// Helper function to fetch activities from Strava API with pagination
-async function fetchStravaActivities(accessToken: string): Promise<StravaActivity[]> {
+// Helper function to get last sync info for incremental sync
+async function getLastSyncInfo(supabaseClient: any, userId: string): Promise<{ lastSyncDate: Date | null, totalSynced: number }> {
+  const { data: syncStatus } = await supabaseClient
+    .from('strava_sync_status')
+    .select('last_activity_date, total_activities_synced')
+    .eq('user_id', userId)
+    .maybeSingle()
+  
+  return {
+    lastSyncDate: syncStatus?.last_activity_date ? new Date(syncStatus.last_activity_date) : null,
+    totalSynced: syncStatus?.total_activities_synced || 0
+  }
+}
+
+// Helper function to update sync status
+async function updateSyncStatus(supabaseClient: any, userId: string, status: string, lastActivityDate?: Date, syncedCount?: number, errorMessage?: string) {
+  const updateData: any = {
+    sync_status: status,
+    last_sync_at: new Date().toISOString()
+  }
+  
+  if (lastActivityDate) updateData.last_activity_date = lastActivityDate.toISOString()
+  if (syncedCount !== undefined) updateData.total_activities_synced = syncedCount
+  if (errorMessage) updateData.error_message = errorMessage
+  
+  await supabaseClient
+    .from('strava_sync_status')
+    .upsert({
+      user_id: userId,
+      ...updateData
+    })
+}
+
+// Helper function to fetch activities from Strava API with incremental sync
+async function fetchStravaActivities(accessToken: string, lastSyncDate: Date | null): Promise<StravaActivity[]> {
   console.log('[strava-sync] Fetching activities from Strava API...')
   
-  const maxActivities = 300
-  const perPage = 200 // Maximum allowed by Strava API
   const activities: StravaActivity[] = []
+  let page = 1
+  const perPage = 200
+  const maxActivities = 500 // Increased limit for better coverage
   
-  // Fetch first page (200 activities)
-  console.log('[strava-sync] Fetching page 1 with 200 activities')
-  let activitiesResponse = await fetch(
-    'https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1',
-    {
+  // Build URL with after parameter for incremental sync
+  let baseUrl = `https://www.strava.com/api/v3/athlete/activities?per_page=${perPage}`
+  if (lastSyncDate) {
+    const afterTimestamp = Math.floor(lastSyncDate.getTime() / 1000)
+    baseUrl += `&after=${afterTimestamp}`
+    console.log(`[strava-sync] Incremental sync: fetching activities after ${lastSyncDate.toISOString()}`)
+  } else {
+    console.log('[strava-sync] Full sync: fetching all recent activities')
+  }
+  
+  while (activities.length < maxActivities) {
+    console.log(`[strava-sync] Fetching page ${page}`)
+    const response = await fetch(`${baseUrl}&page=${page}`, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
       },
-    }
-  )
+    })
 
-  if (!activitiesResponse.ok) {
-    const errorText = await activitiesResponse.text()
-    console.error('[strava-sync] Failed to fetch Strava activities (page 1):', errorText)
-    throw new Error('Failed to fetch activities from Strava')
-  }
-
-  let pageActivities: StravaActivity[] = await activitiesResponse.json()
-  console.log(`[strava-sync] Received ${pageActivities.length} activities from page 1`)
-  activities.push(...pageActivities)
-  
-  // Fetch second page (100 more activities to reach 300 total)
-  if (pageActivities.length === 200 && activities.length < maxActivities) {
-    console.log('[strava-sync] Fetching page 2 with 100 activities')
-    activitiesResponse = await fetch(
-      'https://www.strava.com/api/v3/athlete/activities?per_page=100&page=2',
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`[strava-sync] Failed to fetch Strava activities (page ${page}):`, errorText)
+      if (page === 1) {
+        throw new Error('Failed to fetch activities from Strava')
       }
-    )
-
-    if (activitiesResponse.ok) {
-      pageActivities = await activitiesResponse.json()
-      console.log(`[strava-sync] Received ${pageActivities.length} activities from page 2`)
-      activities.push(...pageActivities)
-    } else {
-      console.warn('[strava-sync] Failed to fetch page 2, continuing with page 1 results')
+      break // Continue with what we have if later pages fail
     }
+
+    const pageActivities: StravaActivity[] = await response.json()
+    console.log(`[strava-sync] Received ${pageActivities.length} activities from page ${page}`)
+    
+    if (pageActivities.length === 0) {
+      console.log('[strava-sync] No more activities to fetch')
+      break
+    }
+    
+    activities.push(...pageActivities)
+    
+    // If we got fewer than perPage activities, we've reached the end
+    if (pageActivities.length < perPage) {
+      console.log('[strava-sync] Reached end of activities')
+      break
+    }
+    
+    page++
   }
   
   console.log(`[strava-sync] Total activities fetched: ${activities.length}`)
@@ -300,70 +314,74 @@ async function fetchDetailedActivityData(activities: StravaActivity[], accessTok
 }
 
 // Helper function to store activities in database
-async function storeActivitiesInDatabase(activities: StravaActivity[], supabaseClient: any, serviceRoleClient: any, userId: string): Promise<number> {
+async function storeActivitiesInDatabase(activities: StravaActivity[], supabaseClient: any, userId: string): Promise<number> {
   console.log('[strava-sync] Starting to store activities in database...')
   let syncedCount = 0
+  const batchSize = 10 // Process in smaller batches for better performance
   
-  for (const activity of activities) {
-    console.log(`[strava-sync] Processing activity ${activity.id}: ${activity.name}`)
+  for (let i = 0; i < activities.length; i += batchSize) {
+    const batch = activities.slice(i, i + batchSize)
+    console.log(`[strava-sync] Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(activities.length / batchSize)}`)
     
-    // First attempt with ANON_KEY
-    // Using the new composite unique constraint (user_id, strava_activity_id)
-    let { error: insertError } = await supabaseClient
+    const batchData = batch.map(activity => ({
+      user_id: userId,
+      strava_activity_id: activity.id,
+      name: activity.name,
+      type: activity.type,
+      distance: activity.distance,
+      moving_time: activity.moving_time,
+      elapsed_time: activity.elapsed_time,
+      total_elevation_gain: activity.total_elevation_gain,
+      start_date: activity.start_date,
+      average_speed: activity.average_speed,
+      max_speed: activity.max_speed,
+      average_heartrate: activity.average_heartrate,
+      max_heartrate: activity.max_heartrate,
+      calories: activity.calories,
+    }))
+    
+    const { error: insertError, count } = await supabaseClient
       .from('strava_activities')
-      .upsert({
-        user_id: userId,
-        strava_activity_id: activity.id,
-        name: activity.name,
-        type: activity.type,
-        distance: activity.distance,
-        moving_time: activity.moving_time,
-        elapsed_time: activity.elapsed_time,
-        total_elevation_gain: activity.total_elevation_gain,
-        start_date: activity.start_date,
-        average_speed: activity.average_speed,
-        max_speed: activity.max_speed,
-        average_heartrate: activity.average_heartrate,
-        max_heartrate: activity.max_heartrate,
-        calories: activity.calories,
-      }, {
-        onConflict: 'user_id,strava_activity_id'  // Updated to use composite constraint
+      .upsert(batchData, {
+        onConflict: 'user_id,strava_activity_id',
+        count: 'exact'
       })
 
-    // If RLS blocks, try with SERVICE_ROLE_KEY
     if (insertError) {
-      console.log(`[strava-sync] ANON_KEY failed for activity ${activity.id}, trying SERVICE_ROLE_KEY:`, insertError)
-      
-      const { error: serviceInsertError } = await serviceRoleClient
-        .from('strava_activities')
-        .upsert({
-          user_id: userId,
-          strava_activity_id: activity.id,
-          name: activity.name,
-          type: activity.type,
-          distance: activity.distance,
-          moving_time: activity.moving_time,
-          elapsed_time: activity.elapsed_time,
-          total_elevation_gain: activity.total_elevation_gain,
-          start_date: activity.start_date,
-          average_speed: activity.average_speed,
-          max_speed: activity.max_speed,
-          average_heartrate: activity.average_heartrate,
-          max_heartrate: activity.max_heartrate,
-          calories: activity.calories,
-        }, {
-          onConflict: 'user_id,strava_activity_id'  // Updated to use composite constraint
-        })
+      console.error(`[strava-sync] Error saving batch:`, insertError)
+      // Try individual inserts for this batch
+      for (const activity of batch) {
+        const { error: singleError } = await supabaseClient
+          .from('strava_activities')
+          .upsert({
+            user_id: userId,
+            strava_activity_id: activity.id,
+            name: activity.name,
+            type: activity.type,
+            distance: activity.distance,
+            moving_time: activity.moving_time,
+            elapsed_time: activity.elapsed_time,
+            total_elevation_gain: activity.total_elevation_gain,
+            start_date: activity.start_date,
+            average_speed: activity.average_speed,
+            max_speed: activity.max_speed,
+            average_heartrate: activity.average_heartrate,
+            max_heartrate: activity.max_heartrate,
+            calories: activity.calories,
+          }, {
+            onConflict: 'user_id,strava_activity_id'
+          })
         
-      if (!serviceInsertError) {
-        syncedCount++
-        console.log(`[strava-sync] Activity ${activity.id} saved with SERVICE_ROLE_KEY - RLS issue on strava_activities`)
-      } else {
-        console.error(`[strava-sync] Failed to save activity ${activity.id} even with SERVICE_ROLE_KEY:`, serviceInsertError)
+        if (!singleError) {
+          syncedCount++
+          console.log(`[strava-sync] Activity ${activity.id} saved individually`)
+        } else {
+          console.error(`[strava-sync] Failed to save activity ${activity.id}:`, singleError)
+        }
       }
     } else {
-      syncedCount++
-      console.log(`[strava-sync] Activity ${activity.id} saved successfully with ANON_KEY`)
+      syncedCount += count || batch.length
+      console.log(`[strava-sync] Batch of ${batch.length} activities saved successfully`)
     }
   }
 
@@ -414,14 +432,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Initialize service role client for potential RLS bypass
-    const serviceRoleClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    // Get user's Strava tokens
+    const tokenData = await getStravaTokens(supabaseClient, user.id)
     
-    // Get user's Strava tokens using helper function
-    const { tokenData, usingServiceRole } = await getStravaTokens(supabaseClient, serviceRoleClient, user.id)
+    // Get last sync info for incremental sync
+    const { lastSyncDate, totalSynced: previouslySynced } = await getLastSyncInfo(supabaseClient, user.id)
+    
+    // Update sync status to 'in_progress'
+    await updateSyncStatus(supabaseClient, user.id, 'in_progress')
 
     // Check if token is expired and refresh if needed
     const now = new Date()
@@ -429,17 +447,32 @@ Deno.serve(async (req) => {
     let accessToken = tokenData.access_token
 
     if (now >= expiresAt) {
-      accessToken = await refreshStravaToken(tokenData, supabaseClient, serviceRoleClient, user.id, usingServiceRole)
+      accessToken = await refreshStravaToken(tokenData, supabaseClient, user.id)
     }
 
-    // Fetch activities from Strava using helper function
-    const activities = await fetchStravaActivities(accessToken)
+    // Fetch activities from Strava using helper function with incremental sync
+    const activities = await fetchStravaActivities(accessToken, lastSyncDate)
 
     // Fetch detailed activity data using helper function
     const { detailedActivities, detailRequestCount } = await fetchDetailedActivityData(activities, accessToken)
 
     // Store activities in database using helper function
-    const syncedCount = await storeActivitiesInDatabase(detailedActivities, supabaseClient, serviceRoleClient, user.id)
+    const syncedCount = await storeActivitiesInDatabase(detailedActivities, supabaseClient, user.id)
+    
+    // Find most recent activity date for next incremental sync
+    const mostRecentActivity = detailedActivities.reduce((latest, activity) => {
+      const activityDate = new Date(activity.start_date)
+      return activityDate > latest ? activityDate : latest
+    }, lastSyncDate || new Date(0))
+
+    // Update sync status
+    await updateSyncStatus(
+      supabaseClient, 
+      user.id, 
+      'completed', 
+      mostRecentActivity,
+      previouslySynced + syncedCount
+    )
 
     console.log(`[strava-sync] Successfully synced ${syncedCount}/${detailedActivities.length} activities for user:`, user.id)
     
@@ -449,7 +482,9 @@ Deno.serve(async (req) => {
       totalActivitiesFromStrava: detailedActivities.length,
       activitiesSyncedToDatabase: syncedCount,
       syncSuccess: syncedCount > 0,
-      usingServiceRole: usingServiceRole,
+      isIncrementalSync: !!lastSyncDate,
+      lastSyncDate: lastSyncDate?.toISOString(),
+      mostRecentActivityDate: mostRecentActivity.toISOString(),
       detailRequestsMade: detailRequestCount
     })
 
@@ -457,11 +492,14 @@ Deno.serve(async (req) => {
       success: true,
       synced: syncedCount,
       total: detailedActivities.length,
+      isIncremental: !!lastSyncDate,
+      lastSyncDate: lastSyncDate?.toISOString(),
+      mostRecentActivity: mostRecentActivity.toISOString(),
       debug: {
         userId: user.id,
-        usingServiceRole: usingServiceRole,
         activitiesReceived: detailedActivities.length,
-        detailRequestsMade: detailRequestCount
+        detailRequestsMade: detailRequestCount,
+        previouslySynced: previouslySynced
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -472,6 +510,20 @@ Deno.serve(async (req) => {
     console.error('[strava-sync] Error message:', error?.message)
     console.error('[strava-sync] Error stack:', error?.stack)
     console.error('[strava-sync] Error name:', error?.name)
+    
+    // Try to get user id from authorization for error logging
+    const authHeader = req.headers.get('Authorization')
+    if (authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '')
+        const { data: { user } } = await supabaseClient.auth.getUser(token)
+        if (user) {
+          await updateSyncStatus(supabaseClient, user.id, 'error', undefined, undefined, error?.message)
+        }
+      } catch (e) {
+        console.log('[strava-sync] Could not update error status:', e)
+      }
+    }
     
     return new Response(JSON.stringify({ 
       error: 'Internal server error',

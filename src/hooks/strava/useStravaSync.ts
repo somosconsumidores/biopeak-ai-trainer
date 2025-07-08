@@ -8,6 +8,43 @@ export const useStravaSync = () => {
   const { user } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [activities, setActivities] = useState<StravaActivity[]>([]);
+  const [syncStatus, setSyncStatus] = useState<{
+    lastSync: Date | null;
+    totalSynced: number;
+    isIncremental: boolean;
+    status: 'completed' | 'in_progress' | 'error' | null;
+    errorMessage?: string;
+  }>({
+    lastSync: null,
+    totalSynced: 0,
+    isIncremental: false,
+    status: null
+  });
+
+  const loadSyncStatus = async () => {
+    if (!user) return;
+
+    try {
+      const { data } = await supabase
+        .from('strava_sync_status')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (data) {
+        setSyncStatus({
+          lastSync: data.last_sync_at ? new Date(data.last_sync_at) : null,
+          totalSynced: data.total_activities_synced || 0,
+          isIncremental: !!data.last_activity_date,
+          status: (['completed', 'in_progress', 'error'].includes(data.sync_status)) ? 
+            data.sync_status as 'completed' | 'in_progress' | 'error' : null,
+          errorMessage: data.error_message
+        });
+      }
+    } catch (error) {
+      console.error('Error loading sync status:', error);
+    }
+  };
 
   const loadActivities = async () => {
     if (!user) return;
@@ -18,7 +55,7 @@ export const useStravaSync = () => {
         .select('*')
         .eq('user_id', user.id)
         .order('start_date', { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (!error && data) {
         setActivities(data);
@@ -62,12 +99,30 @@ export const useStravaSync = () => {
       }
 
       if (data?.success) {
-        const message = `${data.synced} atividades sincronizadas com sucesso!`;
+        const isIncrementalSync = data.isIncremental || false;
+        const syncType = isIncrementalSync ? 'incremental' : 'completa';
+        const message = `Sincronização ${syncType}: ${data.synced} atividades processadas!`;
+        
         toast.success(message);
-        console.log('[useStravaSync] Sync completed:', { synced: data.synced, total: data.total });
+        console.log('[useStravaSync] Sync completed:', { 
+          synced: data.synced, 
+          total: data.total,
+          isIncremental: isIncrementalSync,
+          lastSyncDate: data.lastSyncDate,
+          mostRecentActivity: data.mostRecentActivity
+        });
+        
+        // Update local sync status
+        setSyncStatus({
+          lastSync: new Date(),
+          totalSynced: data.debug?.previouslySynced + data.synced || data.synced,
+          isIncremental: isIncrementalSync,
+          status: 'completed'
+        });
         
         // Reload activities from database
         await loadActivities();
+        await loadSyncStatus();
         
         // Auto-trigger training session processing if activities were synced
         if (data.synced > 0) {
@@ -85,6 +140,13 @@ export const useStravaSync = () => {
       console.error('[useStravaSync] Error syncing Strava activities:', error);
       const errorMessage = error?.message || error?.details || 'Erro desconhecido na sincronização';
       toast.error(`Erro ao sincronizar atividades: ${errorMessage}`);
+      
+      // Update sync status with error
+      setSyncStatus(prev => ({
+        ...prev,
+        status: 'error',
+        errorMessage: errorMessage
+      }));
     } finally {
       setIsSyncing(false);
     }
@@ -93,7 +155,9 @@ export const useStravaSync = () => {
   return {
     isSyncing,
     activities,
+    syncStatus,
     loadActivities,
+    loadSyncStatus,
     handleSync
   };
 };
