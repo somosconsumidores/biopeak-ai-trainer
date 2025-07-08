@@ -1,8 +1,16 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { StravaActivity, StravaActivityStreams } from './strava-api.ts'
 
 // Helper function to store activities in database
 export async function storeActivitiesInDatabase(activities: StravaActivity[], supabaseClient: any, userId: string): Promise<number> {
   console.log('[strava-sync] Starting to store activities in database...')
+  
+  // Use SERVICE_ROLE_KEY for database operations to avoid RLS issues in edge functions
+  const serviceRoleClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  )
+  
   let syncedCount = 0
   const batchSize = 10 // Process in smaller batches for better performance
   
@@ -27,7 +35,7 @@ export async function storeActivitiesInDatabase(activities: StravaActivity[], su
       calories: activity.calories,
     }))
     
-    const { error: insertError, count } = await supabaseClient
+    const { error: insertError, count } = await serviceRoleClient
       .from('strava_activities')
       .upsert(batchData, {
         onConflict: 'user_id,strava_activity_id',
@@ -38,7 +46,7 @@ export async function storeActivitiesInDatabase(activities: StravaActivity[], su
       console.error(`[strava-sync] Error saving batch:`, insertError)
       // Try individual inserts for this batch
       for (const activity of batch) {
-        const { error: singleError } = await supabaseClient
+        const { error: singleError } = await serviceRoleClient
           .from('strava_activities')
           .upsert({
             user_id: userId,
@@ -73,7 +81,7 @@ export async function storeActivitiesInDatabase(activities: StravaActivity[], su
       // Store stream data for activities that have it
       for (const activity of batch) {
         if (activity.streams?.heartrate) {
-          await storeActivityStreams(activity, supabaseClient, userId)
+          await storeActivityStreams(activity, serviceRoleClient, userId)
         }
       }
     }

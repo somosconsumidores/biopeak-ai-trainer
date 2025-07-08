@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
 interface StravaTokenData {
   access_token: string
   refresh_token: string
@@ -35,7 +37,7 @@ export async function getStravaTokens(supabaseClient: any, userId: string): Prom
 
 // Helper function to refresh expired Strava tokens
 export async function refreshStravaToken(tokenData: StravaTokenData, supabaseClient: any, userId: string): Promise<string> {
-  console.log('Token expired, refreshing...')
+  console.log('[strava-sync] Token expired, refreshing...')
   
   const refreshResponse = await fetch('https://www.strava.com/oauth/token', {
     method: 'POST',
@@ -52,7 +54,7 @@ export async function refreshStravaToken(tokenData: StravaTokenData, supabaseCli
 
   if (!refreshResponse.ok) {
     const errorText = await refreshResponse.text()
-    console.error('Failed to refresh Strava token:', {
+    console.error('[strava-sync] Failed to refresh Strava token:', {
       status: refreshResponse.status,
       body: errorText
     })
@@ -60,9 +62,16 @@ export async function refreshStravaToken(tokenData: StravaTokenData, supabaseCli
   }
 
   const refreshData = await refreshResponse.json()
+  console.log('[strava-sync] Token refresh successful')
 
-  // Update tokens in database
-  const { error: updateError } = await supabaseClient
+  // Update tokens in database using SERVICE_ROLE_KEY to avoid RLS issues
+  // Edge functions have issues with RLS policies when using ANON_KEY + auth context
+  const serviceRoleClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  )
+  
+  const { error: updateError } = await serviceRoleClient
     .from('strava_tokens')
     .update({
       access_token: refreshData.access_token,
@@ -73,8 +82,10 @@ export async function refreshStravaToken(tokenData: StravaTokenData, supabaseCli
   
   if (updateError) {
     console.error('[strava-sync] Error updating refreshed tokens:', updateError)
+    throw new Error(`Failed to update refreshed tokens: ${updateError.message}`)
   }
 
+  console.log('[strava-sync] Refreshed tokens saved successfully')
   return refreshData.access_token
 }
 
