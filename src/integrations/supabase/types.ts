@@ -269,6 +269,53 @@ export type Database = {
         }
         Relationships: []
       }
+      strava_activity_streams: {
+        Row: {
+          created_at: string
+          id: string
+          original_size: number | null
+          resolution: string | null
+          series_type: string | null
+          strava_activity_id: number
+          stream_data: Json
+          stream_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          original_size?: number | null
+          resolution?: string | null
+          series_type?: string | null
+          strava_activity_id: number
+          stream_data: Json
+          stream_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          original_size?: number | null
+          resolution?: string | null
+          series_type?: string | null
+          strava_activity_id?: number
+          stream_data?: Json
+          stream_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_strava_activity_streams_activity"
+            columns: ["user_id", "strava_activity_id"]
+            isOneToOne: false
+            referencedRelation: "strava_activities"
+            referencedColumns: ["user_id", "strava_activity_id"]
+          },
+        ]
+      }
       strava_sync_status: {
         Row: {
           created_at: string

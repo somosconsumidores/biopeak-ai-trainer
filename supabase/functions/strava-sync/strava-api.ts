@@ -12,6 +12,17 @@ export interface StravaActivity {
   average_heartrate?: number
   max_heartrate?: number
   calories?: number
+  streams?: StravaActivityStreams
+}
+
+export interface StravaActivityStreams {
+  heartrate?: {
+    type: string
+    data: number[]
+    series_type: string
+    original_size: number
+    resolution: string
+  }
 }
 
 // Helper function to fetch activities from Strava API with incremental sync
@@ -71,6 +82,31 @@ export async function fetchStravaActivities(accessToken: string, lastSyncDate: D
   
   console.log(`[strava-sync] Total activities fetched: ${activities.length}`)
   return activities
+}
+
+// Helper function to fetch activity streams (heart rate data)
+export async function fetchActivityStreams(activityId: number, accessToken: string): Promise<StravaActivityStreams | null> {
+  try {
+    const response = await fetch(
+      `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=heartrate&key_by_type=true`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      }
+    )
+    
+    if (response.ok) {
+      const streamData = await response.json()
+      return streamData
+    } else {
+      console.log(`[strava-sync] No streams available for activity ${activityId}`)
+      return null
+    }
+  } catch (error) {
+    console.error(`[strava-sync] Error fetching streams for activity ${activityId}:`, error)
+    return null
+  }
 }
 
 // Helper function to fetch detailed activity data
@@ -146,12 +182,16 @@ export async function fetchDetailedActivityData(activities: StravaActivity[], ac
         const detailedActivity = await detailResponse.json()
         console.log(`[strava-sync] Got detailed data for activity ${activity.id} - HR: ${detailedActivity.average_heartrate}, Calories: ${detailedActivity.calories}`)
         
+        // Fetch stream data (heart rate time-series)
+        const streamData = await fetchActivityStreams(activity.id, accessToken)
+        
         // Merge detailed data with basic activity data
         const enrichedActivity = {
           ...activity,
           average_heartrate: detailedActivity.average_heartrate || activity.average_heartrate,
           max_heartrate: detailedActivity.max_heartrate || activity.max_heartrate,
           calories: detailedActivity.calories || activity.calories,
+          streams: streamData
         }
         
         detailedActivities.push(enrichedActivity)

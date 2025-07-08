@@ -1,4 +1,4 @@
-import { StravaActivity } from './strava-api.ts'
+import { StravaActivity, StravaActivityStreams } from './strava-api.ts'
 
 // Helper function to store activities in database
 export async function storeActivitiesInDatabase(activities: StravaActivity[], supabaseClient: any, userId: string): Promise<number> {
@@ -69,9 +69,47 @@ export async function storeActivitiesInDatabase(activities: StravaActivity[], su
     } else {
       syncedCount += count || batch.length
       console.log(`[strava-sync] Batch of ${batch.length} activities saved successfully`)
+      
+      // Store stream data for activities that have it
+      for (const activity of batch) {
+        if (activity.streams?.heartrate) {
+          await storeActivityStreams(activity, supabaseClient, userId)
+        }
+      }
     }
   }
 
   console.log(`[strava-sync] Successfully synced ${syncedCount}/${activities.length} activities`)
   return syncedCount
+}
+
+// Helper function to store activity streams data
+async function storeActivityStreams(activity: StravaActivity, supabaseClient: any, userId: string): Promise<void> {
+  if (!activity.streams?.heartrate) return
+  
+  const heartrate = activity.streams.heartrate
+  
+  try {
+    const { error } = await supabaseClient
+      .from('strava_activity_streams')
+      .upsert({
+        user_id: userId,
+        strava_activity_id: activity.id,
+        stream_type: 'heartrate',
+        stream_data: heartrate.data,
+        original_size: heartrate.original_size,
+        resolution: heartrate.resolution,
+        series_type: heartrate.series_type,
+      }, {
+        onConflict: 'user_id,strava_activity_id,stream_type'
+      })
+    
+    if (error) {
+      console.error(`[strava-sync] Error saving stream data for activity ${activity.id}:`, error)
+    } else {
+      console.log(`[strava-sync] Heart rate stream data saved for activity ${activity.id}`)
+    }
+  } catch (error) {
+    console.error(`[strava-sync] Error storing streams for activity ${activity.id}:`, error)
+  }
 }
