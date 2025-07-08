@@ -40,31 +40,45 @@ async function generateSignature(method: string, url: string, params: Record<str
 }
 
 serve(async (req) => {
+  console.log('[garmin-auth] ===== FUNCTION STARTED =====');
+  console.log('[garmin-auth] Method:', req.method);
+  console.log('[garmin-auth] URL:', req.url);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('[garmin-auth] Handling OPTIONS request');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    console.log('[garmin-auth] Entering try block...');
+    console.log('[garmin-auth] Function started');
+    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const clientId = Deno.env.get('GARMIN_CLIENT_ID');
     const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET');
 
-    console.log('Environment check:', {
+    console.log('[garmin-auth] Environment variables check:', {
       supabaseUrl: !!supabaseUrl,
       supabaseKey: !!supabaseKey,
       clientId: !!clientId,
       clientSecret: !!clientSecret
     });
 
-    if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
+    if (!supabaseUrl || !supabaseKey) {
       const missing = [];
       if (!supabaseUrl) missing.push('SUPABASE_URL');
       if (!supabaseKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+      throw new Error(`Missing Supabase environment variables: ${missing.join(', ')}`);
+    }
+
+    if (!clientId || !clientSecret) {
+      const missing = [];
       if (!clientId) missing.push('GARMIN_CLIENT_ID');
       if (!clientSecret) missing.push('GARMIN_CLIENT_SECRET');
-      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+      console.error('[garmin-auth] Missing Garmin credentials:', missing);
+      throw new Error(`Credenciais do Garmin não configuradas: ${missing.join(', ')}. Configure no painel do Supabase.`);
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);

@@ -40,12 +40,18 @@ async function generateSignature(method: string, url: string, params: Record<str
 }
 
 serve(async (req) => {
+  console.log('[garmin-config] ===== FUNCTION STARTED =====');
+  console.log('[garmin-config] Method:', req.method);
+  console.log('[garmin-config] URL:', req.url);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('[garmin-config] Handling OPTIONS request');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log('[garmin-config] Entering try block...');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const clientId = Deno.env.get('GARMIN_CLIENT_ID');
