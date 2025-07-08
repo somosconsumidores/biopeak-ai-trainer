@@ -54,21 +54,28 @@ const GarminSettings = () => {
   };
 
   const handleOAuthCallback = async () => {
-    const oauthToken = searchParams.get('oauth_token');
-    const oauthVerifier = searchParams.get('oauth_verifier');
+    const code = searchParams.get('code'); // OAuth 2.0
+    const oauthToken = searchParams.get('oauth_token'); // OAuth 1.0a legacy
+    const oauthVerifier = searchParams.get('oauth_verifier'); // OAuth 1.0a legacy
     
-    if (oauthToken && oauthVerifier && !oauthProcessedRef.current) {
+    if ((code || (oauthToken && oauthVerifier)) && !oauthProcessedRef.current) {
       oauthProcessedRef.current = true;
       setIsConnecting(true);
       
       try {
-        console.log('Processing OAuth callback:', { oauthToken, oauthVerifier });
+        console.log('Processing OAuth callback:', { 
+          code: !!code, 
+          oauthToken: !!oauthToken, 
+          oauthVerifier: !!oauthVerifier,
+          flowType: code ? 'OAuth 2.0' : 'OAuth 1.0a'
+        });
+        
+        const body = code 
+          ? { code } // OAuth 2.0
+          : { oauth_token: oauthToken, oauth_verifier: oauthVerifier }; // OAuth 1.0a legacy
         
         const { data, error } = await supabase.functions.invoke('garmin-auth', {
-          body: { 
-            oauth_token: oauthToken,
-            oauth_verifier: oauthVerifier
-          }
+          body
         });
 
         if (error) throw error;

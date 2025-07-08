@@ -106,21 +106,131 @@ serve(async (req) => {
       throw new Error('Invalid request body - must be valid JSON');
     }
 
-    const { oauth_token, oauth_verifier } = body;
+    const { code, oauth_token, oauth_verifier } = body;
     console.log('[garmin-auth] Received OAuth parameters:', { 
+      code: !!code,
       oauth_token: !!oauth_token, 
       oauth_verifier: !!oauth_verifier,
-      tokenValue: oauth_token?.substring(0, 15) + '...',
-      verifierValue: oauth_verifier
+      isOAuth2: !!code,
+      isOAuth1: !!(oauth_token && oauth_verifier)
     });
 
-    if (!oauth_token || !oauth_verifier) {
-      throw new Error('Missing OAuth parameters: oauth_token and oauth_verifier are required');
+    // Handle OAuth 2.0 flow (new)
+    if (code) {
+      console.log('[garmin-auth] Processing OAuth 2.0 flow with authorization code...');
+      return await handleOAuth2Flow(code, user, supabase, clientId, clientSecret);
+    }
+    
+    // Handle OAuth 1.0a flow (legacy/demo)
+    if (oauth_token && oauth_verifier) {
+      console.log('[garmin-auth] Processing OAuth 1.0a flow (legacy/demo)...');
+      return await handleOAuth1Flow(oauth_token, oauth_verifier, user, supabase, clientId, clientSecret);
     }
 
-    // Check if this is a demo flow
-    const isDemoFlow = oauth_token.startsWith('demo_token_') && oauth_verifier === 'demo_verifier';
-    console.log('[garmin-auth] Flow type:', isDemoFlow ? 'DEMO' : 'REAL');
+    throw new Error('Missing OAuth parameters: either code (OAuth 2.0) or oauth_token/oauth_verifier (OAuth 1.0a) are required');
+
+});
+
+// OAuth 2.0 Flow Handler
+async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId: string, clientSecret: string) {
+  console.log('[garmin-auth] ===== OAuth 2.0 FLOW =====');
+  
+  // Get stored code verifier
+  const { data: pkceData, error: pkceError } = await supabase
+    .from('oauth_temp_tokens')
+    .select('*')
+    .eq('provider', 'garmin')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (pkceError || !pkceData) {
+    console.error('[garmin-auth] PKCE data not found:', pkceError);
+    throw new Error('PKCE code verifier not found. Please restart the OAuth flow.');
+  }
+
+  const codeVerifier = pkceData.oauth_token;
+  
+  // Exchange authorization code for access token
+  const tokenUrl = 'https://connectapi.garmin.com/di-oauth2-service/oauth/token';
+  
+  const tokenParams = new URLSearchParams({
+    grant_type: 'authorization_code',
+    client_id: clientId,
+    client_secret: clientSecret,
+    code: code,
+    code_verifier: codeVerifier
+  });
+
+  console.log('[garmin-auth] Exchanging code for tokens...');
+  
+  const tokenResponse = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json'
+    },
+    body: tokenParams.toString()
+  });
+
+  console.log('[garmin-auth] Token response status:', tokenResponse.status);
+
+  if (!tokenResponse.ok) {
+    const errorText = await tokenResponse.text();
+    console.error('[garmin-auth] Token exchange failed:', errorText);
+    throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorText}`);
+  }
+
+  const tokenData = await tokenResponse.json();
+  console.log('[garmin-auth] Token data received:', { 
+    hasAccessToken: !!tokenData.access_token,
+    hasRefreshToken: !!tokenData.refresh_token,
+    expiresIn: tokenData.expires_in 
+  });
+
+  // Store OAuth 2.0 tokens
+  const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
+  
+  const { error: insertError } = await supabase
+    .from('garmin_tokens')
+    .upsert({
+      user_id: user.id,
+      access_token: tokenData.access_token,
+      token_secret: tokenData.refresh_token || '', // Use refresh token as secret
+      consumer_key: clientId,
+      oauth_verifier: code, // Store the authorization code
+      expires_at: expiresAt,
+    });
+
+  if (insertError) {
+    console.error('[garmin-auth] Error storing OAuth 2.0 tokens:', insertError);
+    throw insertError;
+  }
+
+  // Clean up PKCE data
+  await supabase
+    .from('oauth_temp_tokens')
+    .delete()
+    .eq('id', pkceData.id);
+
+  console.log('[garmin-auth] OAuth 2.0 flow completed successfully');
+
+  return new Response(JSON.stringify({ 
+    success: true,
+    message: 'Garmin Connect connected successfully via OAuth 2.0',
+    oauth2: true
+  }), {
+    headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
+  });
+}
+
+// OAuth 1.0a Flow Handler (Legacy/Demo)
+async function handleOAuth1Flow(oauth_token: string, oauth_verifier: string, user: any, supabase: any, clientId: string, clientSecret: string) {
+  console.log('[garmin-auth] ===== OAuth 1.0a LEGACY FLOW =====');
+  
+  // Check if this is a demo flow
+  const isDemoFlow = oauth_token.startsWith('demo_token_') && oauth_verifier === 'demo_verifier';
+  console.log('[garmin-auth] Flow type:', isDemoFlow ? 'DEMO' : 'REAL');
 
     if (isDemoFlow) {
       console.log('[garmin-auth] Processing demo OAuth flow...');
@@ -154,14 +264,14 @@ serve(async (req) => {
         .delete()
         .eq('oauth_token', oauth_token);
 
-      console.log('[garmin-auth] Demo flow completed successfully');
+    console.log('[garmin-auth] Demo flow completed successfully');
       
       return new Response(JSON.stringify({ 
         success: true,
         message: 'Garmin Connect connected successfully (demo mode)',
         isDemo: true
       }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
       });
     }
 
@@ -304,9 +414,9 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true,
-      message: 'Garmin Connect connected successfully' 
+      message: 'Garmin Connect connected successfully via OAuth 1.0a' 
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
@@ -315,7 +425,7 @@ serve(async (req) => {
       error: error.message 
     }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
     });
   }
 });

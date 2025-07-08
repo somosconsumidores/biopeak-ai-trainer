@@ -1,56 +1,30 @@
 import { generateSignature, buildAuthorizationHeader } from './oauth-utils.ts';
 
-// Make authenticated API call to Garmin
+// Make authenticated API call to Garmin using OAuth 2.0
 export async function makeGarminApiCall(url: string, accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
-  console.log(`Making OAuth 1.0 call to: ${url}`);
+  console.log(`Making OAuth 2.0 call to: ${url}`);
   console.log('Token validation:', {
     accessToken: accessToken?.substring(0, 8) + '...',
-    tokenSecret: tokenSecret?.substring(0, 8) + '...',
+    hasToken: !!accessToken,
     clientId: clientId?.substring(0, 8) + '...',
     clientSecret: clientSecret ? 'present' : 'missing'
   });
   
-  // Validate that we have real tokens, not demo UUIDs
-  if (accessToken?.includes('-') && accessToken.length === 36) {
-    console.warn('Access token appears to be a UUID (demo token)');
-    throw new Error('Demo tokens cannot be used for real API calls');
+  // Validate that we have a real access token
+  if (!accessToken || accessToken.includes('demo_') || (accessToken.includes('-') && accessToken.length === 36)) {
+    console.warn('Invalid access token detected');
+    throw new Error('Invalid access token - please reconnect your Garmin account');
   }
-  
-  const apiParams = {
-    oauth_consumer_key: clientId,
-    oauth_token: accessToken,
-    oauth_nonce: Math.random().toString(36).substring(2, 15),
-    oauth_signature_method: 'HMAC-SHA1',
-    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_version: '1.0'
-  };
 
-  console.log('OAuth parameters:', { ...apiParams, oauth_signature: '[will be generated]' });
-
-  // Generate signature (exclude oauth_signature from params for signature generation)
-  const signature = await generateSignature('GET', url, apiParams, clientSecret, tokenSecret);
-  
-  console.log('Generated signature:', signature);
-  
-  // Build authorization header
-  const authParams = {
-    ...apiParams,
-    oauth_signature: signature
-  };
-  
-  const authHeader = buildAuthorizationHeader(authParams);
-  
-  console.log('Authorization header:', authHeader);
-
-  // Headers according to official Garmin API documentation
+  // OAuth 2.0 Bearer token authorization
   const headers = {
-    'Authorization': authHeader,
-    'Accept': 'application/json;charset=UTF-8',
-    'User-Agent': 'Mozilla/5.0 (compatible; GarminConnect/1.0; +https://connect.garmin.com)',
-    'Cache-Control': 'no-cache'
+    'Authorization': `Bearer ${accessToken}`,
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'User-Agent': 'BioPeak/1.0'
   };
 
-  console.log('Request headers:', headers);
+  console.log('Request headers:', { ...headers, Authorization: 'Bearer [REDACTED]' });
 
   // Make API call with enhanced error handling
   const response = await fetch(url, {
@@ -81,19 +55,20 @@ export function getGarminApiEndpoints() {
   const uploadStartTime = Math.floor(thirtyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
-  // Updated endpoints based on official Garmin Developer Program research
-  // Note: Actual partner API endpoints may differ and require business approval
+  // Official Garmin Connect API endpoints for OAuth 2.0
+  // Based on official documentation and Activity API specs
   return [
-    // Primary official connectapi endpoint with time range (most likely to work)
+    // Primary wellness API endpoints (OAuth 2.0)
+    `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
+    `${baseUrl}/wellness-api/rest/activities`,
+    
+    // Activity service endpoints
+    `${baseUrl}/activity-service/activity?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
     `${baseUrl}/activity-service/activity`,
     
-    // Alternative activity service endpoints
+    // Alternative endpoints to test
     `${baseUrl}/activity-service/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
-    `${baseUrl}/activity-service/activities`,
-    
-    // Legacy endpoints (likely deprecated but worth testing)
-    `${baseUrl}/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
-    `${baseUrl}/rest/activities`
+    `${baseUrl}/activity-service/activities`
   ];
 }
 

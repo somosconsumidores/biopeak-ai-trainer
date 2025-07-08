@@ -43,7 +43,7 @@ const GarminIntegration = () => {
         // Validate token format - check if it's a real OAuth token
         const isValidToken = data.access_token && 
                            data.token_secret && 
-                           !data.access_token.includes('-') && 
+                           !data.access_token.includes('demo_') &&
                            data.access_token.length > 10;
         
         if (isValidToken) {
