@@ -39,22 +39,35 @@ serve(async (req) => {
 
   try {
     console.log('[garmin-config] Entering OAuth 2.0 flow...');
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    // Get environment variables safely
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const clientId = Deno.env.get('GARMIN_CLIENT_ID');
     const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET');
     
     console.log('[garmin-config] ===== CREDENTIAL DIAGNOSTIC =====');
-    console.log('[garmin-config] Environment check - Garmin credentials:', {
-      clientId: !!clientId,
-      clientSecret: !!clientSecret,
+    console.log('[garmin-config] Environment check:', {
+      hasSupabaseUrl: !!supabaseUrl,
+      hasSupabaseKey: !!supabaseKey,
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
       clientIdLength: clientId?.length || 0,
-      clientSecretLength: clientSecret?.length || 0,
-      clientIdPreview: clientId ? clientId.substring(0, 8) + '...' : 'MISSING',
-      clientSecretPreview: clientSecret ? clientSecret.substring(0, 8) + '...' : 'MISSING'
+      clientSecretLength: clientSecret?.length || 0
     });
     console.log('[garmin-config] ===============================');
     
+    // Check for missing Supabase credentials first
+    if (!supabaseUrl || !supabaseKey) {
+      const missing = [];
+      if (!supabaseUrl) missing.push('SUPABASE_URL');
+      if (!supabaseKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+      
+      console.error('[garmin-config] Missing Supabase credentials:', missing);
+      throw new Error(`Credenciais do Supabase não configuradas: ${missing.join(', ')}`);
+    }
+    
+    // Check for missing Garmin credentials
     if (!clientId || !clientSecret) {
       const missing = [];
       if (!clientId) missing.push('GARMIN_CLIENT_ID');
@@ -62,22 +75,36 @@ serve(async (req) => {
       
       console.error('[garmin-config] ===== CREDENTIAL ERROR =====');
       console.error('[garmin-config] Missing Garmin credentials:', missing);
-      console.error('[garmin-config] This will cause OAuth 2.0 requests to fail');
       console.error('[garmin-config] Please configure these secrets in Supabase');
       console.error('[garmin-config] ============================');
       
-      throw new Error(`Credenciais do Garmin não configuradas: ${missing.join(', ')}. Configure no painel do Supabase em Settings > Edge Functions.`);
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: `Credenciais do Garmin não configuradas: ${missing.join(', ')}. Configure no painel do Supabase em Settings > Edge Functions.`,
+        help: 'Acesse o Garmin Developer Console para obter suas credenciais',
+        missing: missing
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
     
-    // Validate credential format
-    if (clientId.length < 10 || clientSecret.length < 20) {
+    // Validate credential format - be more flexible with validation
+    if (clientId.length < 5 || clientSecret.length < 10) {
       console.error('[garmin-config] ===== CREDENTIAL FORMAT ERROR =====');
       console.error('[garmin-config] Credentials appear to be invalid format');
-      console.error('[garmin-config] Client ID length:', clientId.length, '(expected > 10)');
-      console.error('[garmin-config] Client Secret length:', clientSecret.length, '(expected > 20)');
+      console.error('[garmin-config] Client ID length:', clientId.length, '(expected > 5)');
+      console.error('[garmin-config] Client Secret length:', clientSecret.length, '(expected > 10)');
       console.error('[garmin-config] ==============================');
       
-      throw new Error('Credenciais do Garmin parecem ter formato inválido. Verifique se estão corretas no Garmin Developer Console.');
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'Credenciais do Garmin parecem ter formato inválido. Verifique se estão corretas no Garmin Developer Console.',
+        help: 'As credenciais devem ser copiadas exatamente como aparecem no Garmin Developer Console'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
     
     console.log('[garmin-config] ✅ Credentials appear valid, proceeding with OAuth 2.0 PKCE...');
