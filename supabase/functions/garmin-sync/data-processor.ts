@@ -2,151 +2,124 @@
 
 // Process Activity API response data
 export function processGarminActivities(activitiesData: any, userId: string) {
-  let processedActivities = [];
-
-  // Process activities data with better mapping for Activity API
-  if (activitiesData && Array.isArray(activitiesData)) {
-    console.log(`Processing ${activitiesData.length} activities from Activity API`);
-    
-    processedActivities = activitiesData.map((activity: any, index: number) => {
-      // Map Activity API response fields to our database structure
-      const activityId = activity.activityId || activity.summaryId || activity.id || (Date.now() + index);
-      
-      console.log(`Processing activity ${index + 1}:`, JSON.stringify(activity, null, 2));
-      
-      return {
-        user_id: userId,
-        garmin_activity_id: parseInt(activityId.toString()) || (Date.now() + index),
-        name: activity.activityName || activity.name || `${activity.activityType || 'Activity'} ${index + 1}`,
-        type: (activity.activityType || activity.sportType || 'unknown').toLowerCase(),
-        start_date: activity.startTimeInSeconds 
-          ? new Date(activity.startTimeInSeconds * 1000).toISOString() 
-          : activity.startTimeLocal || activity.startDate || new Date().toISOString(),
-        distance: activity.distanceInMeters || activity.distance || null,
-        moving_time: activity.durationInSeconds || activity.movingDuration || activity.duration || null,
-        elapsed_time: activity.elapsedDurationInSeconds || activity.elapsedDuration || activity.durationInSeconds || null,
-        average_speed: activity.averageSpeedInMetersPerSecond || activity.averageSpeed || null,
-        max_speed: activity.maxSpeedInMetersPerSecond || activity.maxSpeed || null,
-        average_heartrate: activity.averageHeartRateInBeatsPerMinute || activity.averageHR || activity.avgHeartRate || null,
-        max_heartrate: activity.maxHeartRateInBeatsPerMinute || activity.maxHR || activity.maxHeartRate || null,
-        calories: activity.activeKilocalories || activity.calories || null,
-        total_elevation_gain: activity.totalElevationGainInMeters || activity.elevationGain || null,
-      };
-    }).filter(activity => activity.garmin_activity_id); // Remove activities without valid IDs
-    
-    console.log(`Successfully processed ${processedActivities.length} activities`);
+  console.log('Processing Garmin activities for user:', userId);
+  console.log('Raw activities data:', JSON.stringify(activitiesData, null, 2));
+  
+  if (!Array.isArray(activitiesData)) {
+    console.warn('Activities data is not an array:', typeof activitiesData);
+    return [];
   }
 
-  return processedActivities;
+  return activitiesData.map((activity: any) => {
+    const processedActivity = {
+      user_id: userId,
+      garmin_activity_id: activity.activityId || activity.id || Math.floor(Math.random() * 1000000),
+      name: activity.activityName || activity.name || 'Untitled Activity',
+      type: activity.activityType?.typeKey || activity.type || 'Unknown',
+      start_date: activity.startTimeLocal || activity.startTime || new Date().toISOString(),
+      distance: activity.distance ? parseFloat(activity.distance) : null,
+      moving_time: activity.movingDuration || activity.duration || null,
+      elapsed_time: activity.elapsedDuration || activity.duration || null,
+      total_elevation_gain: activity.elevationGain ? parseFloat(activity.elevationGain) : null,
+      average_speed: activity.averageSpeed ? parseFloat(activity.averageSpeed) : null,
+      max_speed: activity.maxSpeed ? parseFloat(activity.maxSpeed) : null,
+      average_heartrate: activity.averageHR || activity.avgHeartRate || null,
+      max_heartrate: activity.maxHR || activity.maxHeartRate || null,
+      calories: activity.calories ? parseFloat(activity.calories) : null
+    };
+    
+    console.log('Processed activity:', processedActivity);
+    return processedActivity;
+  });
 }
 
 // Process Daily Health Stats API response data
 export function processDailyHealthData(healthData: any, userId: string) {
-  let processedHealthData = [];
-
-  if (healthData && Array.isArray(healthData)) {
-    console.log(`Processing ${healthData.length} daily health records from Daily Health Stats API`);
-    
-    processedHealthData = healthData.map((daily: any) => {
-      // Map Daily Health Stats API response fields to our database structure
-      const summaryDate = daily.calendarDate || daily.summaryDate || daily.date;
-      
-      console.log(`Processing daily health record:`, JSON.stringify(daily, null, 2));
-      
-      return {
-        user_id: userId,
-        summary_date: summaryDate,
-        steps: daily.totalSteps || daily.steps || null,
-        distance_in_meters: daily.totalDistanceMeters || daily.distanceInMeters || null,
-        active_time_in_seconds: daily.activeTimeInSeconds || daily.activeTime || null,
-        calories_burned: daily.activeKilocalories || daily.totalCalories || daily.calories || null,
-        floors_climbed: daily.floorsClimbed || daily.floors || null,
-        sleep_duration_in_seconds: daily.sleepDurationInSeconds || daily.totalSleepTime || null,
-        deep_sleep_duration_in_seconds: daily.deepSleepDurationInSeconds || daily.deepSleep || null,
-        light_sleep_duration_in_seconds: daily.lightSleepDurationInSeconds || daily.lightSleep || null,
-        rem_sleep_duration_in_seconds: daily.remSleepDurationInSeconds || daily.remSleep || null,
-        awake_duration_in_seconds: daily.awakeDurationInSeconds || daily.awakeTime || null,
-        resting_heart_rate: daily.restingHeartRateInBeatsPerMinute || daily.restingHR || null,
-        stress_score: daily.maxStressLevel || daily.stressScore || null,
-        body_battery_drained: daily.bodyBatteryDrained || null,
-        body_battery_charged: daily.bodyBatteryCharged || null,
-        moderate_intensity_minutes: daily.moderateIntensityDurationInSeconds ? Math.floor(daily.moderateIntensityDurationInSeconds / 60) : null,
-        vigorous_intensity_minutes: daily.vigorousIntensityDurationInSeconds ? Math.floor(daily.vigorousIntensityDurationInSeconds / 60) : null,
-      };
-    }).filter(record => record.summary_date); // Remove records without valid dates
-    
-    console.log(`Successfully processed ${processedHealthData.length} daily health records`);
+  console.log('Processing Garmin daily health data for user:', userId);
+  console.log('Raw health data:', JSON.stringify(healthData, null, 2));
+  
+  if (!Array.isArray(healthData)) {
+    console.warn('Health data is not an array:', typeof healthData);
+    return [];
   }
 
-  return processedHealthData;
+  return healthData.map((dayData: any) => {
+    const processedHealth = {
+      user_id: userId,
+      summary_date: dayData.summaryDate || dayData.calendarDate || new Date().toISOString().split('T')[0],
+      steps: dayData.totalSteps || dayData.steps || null,
+      distance_in_meters: dayData.totalDistanceMeters || dayData.distance || null,
+      calories_burned: dayData.totalKilocalories || dayData.calories || null,
+      active_time_in_seconds: dayData.activeTimeInSeconds || null,
+      floors_climbed: dayData.floorsClimbed || null,
+      resting_heart_rate: dayData.restingHeartRate || null,
+      stress_score: dayData.maxStressLevel || null,
+      sleep_duration_in_seconds: dayData.sleepTimeSeconds || null,
+      awake_duration_in_seconds: dayData.awakeDurationInSeconds || null,
+      light_sleep_duration_in_seconds: dayData.lightSleepDurationInSeconds || null,
+      deep_sleep_duration_in_seconds: dayData.deepSleepDurationInSeconds || null,
+      rem_sleep_duration_in_seconds: dayData.remSleepDurationInSeconds || null,
+      body_battery_charged: dayData.bodyBatteryChargedValue || null,
+      body_battery_drained: dayData.bodyBatteryDrainedValue || null,
+      moderate_intensity_minutes: dayData.moderateIntensityDurationInSeconds ? Math.floor(dayData.moderateIntensityDurationInSeconds / 60) : null,
+      vigorous_intensity_minutes: dayData.vigorousIntensityDurationInSeconds ? Math.floor(dayData.vigorousIntensityDurationInSeconds / 60) : null
+    };
+    
+    console.log('Processed health data:', processedHealth);
+    return processedHealth;
+  });
 }
 
+// Create fallback activities for demo purposes
 export function createFallbackActivities(userId: string) {
-  console.log('Creating enhanced fallback data');
-  const now = Date.now();
+  console.log('Creating fallback activities for user:', userId);
   
-  return [
+  const fallbackActivities = [
     {
       user_id: userId,
-      garmin_activity_id: now + 1,
-      name: 'Morning Run (Garmin Connect)',
-      type: 'running',
-      start_date: new Date().toISOString(),
+      garmin_activity_id: Math.floor(Math.random() * 1000000),
+      name: 'Demo Running Activity',
+      type: 'Running',
+      start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
       distance: 5000,
       moving_time: 1800,
-      elapsed_time: 1900,
+      elapsed_time: 1920,
+      total_elevation_gain: 50,
       average_speed: 2.78,
+      max_speed: 3.5,
       average_heartrate: 150,
       max_heartrate: 170,
-      calories: 350,
-      total_elevation_gain: 50,
-    },
-    {
-      user_id: userId,
-      garmin_activity_id: now + 2,
-      name: 'Evening Bike Ride (Garmin Connect)',
-      type: 'cycling',
-      start_date: new Date(Date.now() - 86400000).toISOString(),
-      distance: 15000,
-      moving_time: 2700,
-      elapsed_time: 2800,
-      average_speed: 5.56,
-      average_heartrate: 140,
-      max_heartrate: 165,
-      calories: 480,
-      total_elevation_gain: 200,
+      calories: 350
     }
   ];
+  
+  console.log('Created fallback activities:', fallbackActivities);
+  return fallbackActivities;
 }
 
+// Create fallback daily health data for demo purposes
 export function createFallbackDailyHealth(userId: string) {
-  console.log('Creating fallback daily health data');
-  const now = new Date();
-  const healthData = [];
+  console.log('Creating fallback daily health data for user:', userId);
   
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-    healthData.push({
+  const fallbackHealth = [];
+  for (let i = 0; i < 3; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    
+    fallbackHealth.push({
       user_id: userId,
       summary_date: date.toISOString().split('T')[0],
-      steps: Math.floor(6000 + Math.random() * 8000), // 6-14k steps
-      distance_in_meters: Math.floor(4000 + Math.random() * 6000), // 4-10km
-      active_time_in_seconds: Math.floor(3600 + Math.random() * 7200), // 1-3 hours
-      calories_burned: Math.floor(1800 + Math.random() * 800), // 1800-2600 calories
-      floors_climbed: Math.floor(Math.random() * 20), // 0-20 floors
-      sleep_duration_in_seconds: Math.floor(25200 + Math.random() * 7200), // 7-9 hours
-      deep_sleep_duration_in_seconds: Math.floor(5400 + Math.random() * 3600), // 1.5-2.5 hours
-      light_sleep_duration_in_seconds: Math.floor(10800 + Math.random() * 3600), // 3-4 hours
-      rem_sleep_duration_in_seconds: Math.floor(5400 + Math.random() * 1800), // 1.5-2 hours
-      awake_duration_in_seconds: Math.floor(Math.random() * 1800), // 0-30 minutes
-      resting_heart_rate: Math.floor(55 + Math.random() * 20), // 55-75 bpm
-      stress_score: Math.floor(20 + Math.random() * 60), // 20-80
-      body_battery_drained: Math.floor(20 + Math.random() * 40), // 20-60
-      body_battery_charged: Math.floor(40 + Math.random() * 40), // 40-80
-      moderate_intensity_minutes: Math.floor(Math.random() * 60), // 0-60 minutes
-      vigorous_intensity_minutes: Math.floor(Math.random() * 30), // 0-30 minutes
+      steps: 8000 + Math.floor(Math.random() * 4000),
+      distance_in_meters: 6000 + Math.floor(Math.random() * 3000),
+      calories_burned: 2000 + Math.floor(Math.random() * 500),
+      active_time_in_seconds: 3600 + Math.floor(Math.random() * 1800),
+      floors_climbed: Math.floor(Math.random() * 20),
+      resting_heart_rate: 55 + Math.floor(Math.random() * 15),
+      stress_score: Math.floor(Math.random() * 100),
+      sleep_duration_in_seconds: 25200 + Math.floor(Math.random() * 7200)
     });
   }
   
-  return healthData;
+  console.log('Created fallback health data:', fallbackHealth);
+  return fallbackHealth;
 }
