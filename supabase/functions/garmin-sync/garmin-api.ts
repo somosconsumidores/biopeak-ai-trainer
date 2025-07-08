@@ -1,16 +1,14 @@
-import { generateSignature, buildAuthorizationHeader } from './oauth-utils.ts';
-
 // Make authenticated API call to Garmin using OAuth 2.0
 export async function makeGarminApiCall(url: string, accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
   console.log(`Making OAuth 2.0 call to: ${url}`);
   console.log('Token validation:', {
     accessToken: accessToken?.substring(0, 8) + '...',
     hasToken: !!accessToken,
-    clientId: clientId?.substring(0, 8) + '...',
-    clientSecret: clientSecret ? 'present' : 'missing'
+    tokenType: 'OAuth 2.0 Bearer',
+    isJWT: accessToken?.startsWith('eyJ')
   });
   
-  // Validate that we have a real access token
+  // Validate OAuth 2.0 access token (JWT format)
   if (!accessToken || accessToken.includes('demo_') || (accessToken.includes('-') && accessToken.length === 36)) {
     console.warn('Invalid access token detected');
     throw new Error('Invalid access token - please reconnect your Garmin account');
@@ -20,7 +18,6 @@ export async function makeGarminApiCall(url: string, accessToken: string, tokenS
   const headers = {
     'Authorization': `Bearer ${accessToken}`,
     'Accept': 'application/json',
-    'Content-Type': 'application/json',
     'User-Agent': 'BioPeak/1.0'
   };
 
@@ -47,7 +44,7 @@ export async function makeGarminApiCall(url: string, accessToken: string, tokenS
 }
 
 export function getGarminApiEndpoints() {
-  const baseUrl = 'https://connectapi.garmin.com';
+  const baseUrl = 'https://apis.garmin.com';
   
   // Convert to UTC timestamps in seconds (official API requirement)
   const now = new Date();
@@ -55,20 +52,18 @@ export function getGarminApiEndpoints() {
   const uploadStartTime = Math.floor(thirtyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
-  // Official Garmin Connect API endpoints for OAuth 2.0
-  // Based on official documentation and Activity API specs
+  // Official Garmin Wellness API endpoints for OAuth 2.0
+  // Based on official Garmin Developer documentation
   return [
     // Primary wellness API endpoints (OAuth 2.0)
     `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
     `${baseUrl}/wellness-api/rest/activities`,
     
-    // Activity service endpoints
-    `${baseUrl}/activity-service/activity?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
-    `${baseUrl}/activity-service/activity`,
+    // Legacy format for compatibility testing
+    `${baseUrl}/wellness-api/rest/activities?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
     
-    // Alternative endpoints to test
-    `${baseUrl}/activity-service/activities?uploadStartTimeInSeconds=${uploadStartTime}&uploadEndTimeInSeconds=${uploadEndTime}`,
-    `${baseUrl}/activity-service/activities`
+    // User permissions endpoint (to verify access)
+    `${baseUrl}/wellness-api/rest/user/permissions`
   ];
 }
 
@@ -100,7 +95,7 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
     });
     
     try {
-      console.log(`🔄 Making OAuth 1.0 call...`);
+      console.log(`🔄 Making OAuth 2.0 Bearer call...`);
       const activitiesResponse = await makeGarminApiCall(endpoint, accessToken, tokenSecret, clientId, clientSecret);
       
       console.log(`📊 Response details:`, {
@@ -145,11 +140,11 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
           lastError = `Bad Request (400) on ${endpoint}: ${errorText.substring(0, 150)}...`;
         } else if (activitiesResponse.status === 401) {
           console.error('🔐 Unauthorized Analysis:');
-          console.error('  - Possible issue: Invalid OAuth signature, expired tokens, or wrong credentials');
-          console.error('  - Check: GARMIN_CLIENT_ID, GARMIN_CLIENT_SECRET, and OAuth signature algorithm');
+          console.error('  - Possible issue: Expired OAuth 2.0 access token or invalid Bearer token');
+          console.error('  - Check: Token expiration and refresh token usage');
           lastError = `Unauthorized (401) on ${endpoint}: ${errorText.substring(0, 150)}...`;
           
-          // For 401 errors, continue testing other endpoints to identify signature vs endpoint issues
+          // For 401 errors, continue testing other endpoints to identify token vs endpoint issues
           console.log('  - Continuing to test other endpoints to isolate the issue...');
         } else if (activitiesResponse.status === 403) {
           console.error('🚫 Forbidden Analysis:');
@@ -211,12 +206,12 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
   console.log('========================================');
   
   if (!activitiesData) {
-    console.log('❌ All API endpoints failed - no activities retrieved');
+  console.log('❌ All API endpoints failed - no activities retrieved');
     console.log('🔧 Troubleshooting suggestions:');
-    console.log('  1. Verify GARMIN_CLIENT_ID and GARMIN_CLIENT_SECRET are correct');
+    console.log('  1. Verify OAuth 2.0 access token is not expired');
     console.log('  2. Check if Garmin Developer Program access is approved');
-    console.log('  3. Validate OAuth 1.0 signature generation');
-    console.log('  4. Confirm user has authorized the application');
+    console.log('  3. Validate Bearer token format (should be JWT)');
+    console.log('  4. Confirm user has authorized the application with correct scopes');
   }
 
   return { activitiesData, lastError, attemptedEndpoints };
