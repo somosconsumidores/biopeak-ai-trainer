@@ -430,12 +430,13 @@ async function handleOAuth1Flow(oauth_token: string, oauth_verifier: string, use
     });
 
   } catch (error) {
-    console.error('Error in garmin-auth function:', error);
+    console.error('[garmin-auth] Error in OAuth 1.0a flow:', error);
     return new Response(JSON.stringify({ 
+      success: false,
       error: error.message 
     }), {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
     });
   }
-});
+}
