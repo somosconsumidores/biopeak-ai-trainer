@@ -37,19 +37,32 @@ export async function getStravaTokens(supabaseClient: any, userId: string): Prom
 
 // Helper function to refresh expired Strava tokens
 export async function refreshStravaToken(tokenData: StravaTokenData, supabaseClient: any, userId: string): Promise<string> {
-  console.log('[strava-sync] Token expired, refreshing...')
+  console.log('[strava-sync] Token expired, refreshing...', {
+    userId,
+    tokenExpiresAt: tokenData.expires_at,
+    currentTime: new Date().toISOString()
+  })
+  
+  const refreshPayload = {
+    client_id: Deno.env.get('STRAVA_CLIENT_ID'),
+    client_secret: Deno.env.get('STRAVA_CLIENT_SECRET'),
+    refresh_token: tokenData.refresh_token,
+    grant_type: 'refresh_token',
+  }
+  
+  console.log('[strava-sync] Refresh token payload prepared:', {
+    client_id: refreshPayload.client_id,
+    has_client_secret: !!refreshPayload.client_secret,
+    has_refresh_token: !!refreshPayload.refresh_token,
+    grant_type: refreshPayload.grant_type
+  })
   
   const refreshResponse = await fetch('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      client_id: Deno.env.get('STRAVA_CLIENT_ID'),
-      client_secret: Deno.env.get('STRAVA_CLIENT_SECRET'),
-      refresh_token: tokenData.refresh_token,
-      grant_type: 'refresh_token',
-    }),
+    body: JSON.stringify(refreshPayload),
   })
 
   if (!refreshResponse.ok) {

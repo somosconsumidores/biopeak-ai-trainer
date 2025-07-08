@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     console.log('[strava-sync] Token extracted, length:', token?.length)
     
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
-    console.log('[strava-sync] Auth check result:', { hasUser: !!user, authError: !!authError })
+    console.log('[strava-sync] Auth check result:', { hasUser: !!user, authError: !!authError, userId: user?.id })
     
     if (authError || !user) {
       console.error('[strava-sync] Authentication failed:', authError?.message)
@@ -64,23 +64,35 @@ Deno.serve(async (req) => {
       })
     }
 
+    console.log('[strava-sync] User authenticated successfully:', user.id)
+
     // Get last sync info for incremental sync
     const { lastSyncDate, totalSynced: previouslySynced } = await getLastSyncInfo(supabaseClient, user.id)
+    console.log('[strava-sync] Last sync info:', { lastSyncDate, previouslySynced })
     
     // Update sync status to 'in_progress'
     await updateSyncStatus(supabaseClient, user.id, 'in_progress')
+    console.log('[strava-sync] Sync status updated to in_progress')
 
     // Ensure we have a valid access token (handles refresh if needed)
+    console.log('[strava-sync] Ensuring valid access token...')
     const accessToken = await ensureValidAccessToken(supabaseClient, user.id)
+    console.log('[strava-sync] Access token obtained successfully')
 
     // Fetch activities from Strava using helper function with incremental sync
+    console.log('[strava-sync] Fetching activities from Strava API...')
     const activities = await fetchStravaActivities(accessToken, lastSyncDate)
+    console.log('[strava-sync] Activities fetched:', activities.length)
 
     // Fetch detailed activity data using helper function
+    console.log('[strava-sync] Fetching detailed activity data...')
     const { detailedActivities, detailRequestCount } = await fetchDetailedActivityData(activities, accessToken)
+    console.log('[strava-sync] Detailed activities processed:', detailedActivities.length)
 
     // Store activities in database using helper function
+    console.log('[strava-sync] Storing activities in database...')
     const syncedCount = await storeActivitiesInDatabase(detailedActivities, supabaseClient, user.id)
+    console.log('[strava-sync] Activities stored:', syncedCount)
     
     // Find most recent activity date for next incremental sync
     const mostRecentActivity = detailedActivities.reduce((latest, activity) => {
