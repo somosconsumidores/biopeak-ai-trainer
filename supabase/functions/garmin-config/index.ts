@@ -148,7 +148,7 @@ serve(async (req) => {
     }
 
     // OAuth 2.0 Authorization URL with PKCE (seguindo especificação oficial)
-    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin-settings';
+    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin';
     
     const authParams = new URLSearchParams({
       response_type: 'code',

@@ -170,7 +170,7 @@ async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId
     client_secret: clientSecret,
     code: code,
     code_verifier: codeVerifier,
-    redirect_uri: 'https://preview--biopeak-ai-trainer.lovable.app/garmin-settings'
+    redirect_uri: 'https://preview--biopeak-ai-trainer.lovable.app/garmin'
   });
 
   console.log('[garmin-auth] Exchanging code for tokens...');
