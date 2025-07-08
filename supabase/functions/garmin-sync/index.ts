@@ -28,6 +28,15 @@ serve(async (req) => {
       clientId: !!clientId,
       clientSecret: !!clientSecret
     });
+    
+    // Add more detailed logging for debugging
+    console.log('Function invocation details:', {
+      timestamp: new Date().toISOString(),
+      method: req.method,
+      url: req.url,
+      userAgent: req.headers.get('user-agent'),
+      contentType: req.headers.get('content-type')
+    });
 
     if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
       const missing = [];
@@ -150,19 +159,32 @@ serve(async (req) => {
     // Check user permissions first
     console.log('Checking Garmin API permissions...');
     const { permissions } = await checkGarminPermissions(accessToken, tokenSecret, clientId, clientSecret);
+    console.log('Permissions result:', permissions);
     
     // Try to fetch data from both APIs
     console.log('Attempting to fetch data from both Garmin APIs...');
     
     // Fetch activities from Activity API
+    console.log('=== FETCHING ACTIVITIES ===');
     const { data: activitiesData, lastError: activitiesError } = await fetchGarminActivities(
       accessToken, tokenSecret, clientId, clientSecret
     );
+    console.log('Activities API result:', {
+      hasData: !!activitiesData,
+      dataLength: activitiesData?.length || 0,
+      error: activitiesError
+    });
     
-    // Fetch daily health data from Daily Health Stats API
+    // Fetch daily health data from Daily Health Stats API  
+    console.log('=== FETCHING DAILY HEALTH ===');
     const { data: healthData, lastError: healthError } = await fetchGarminDailyHealth(
       accessToken, tokenSecret, clientId, clientSecret
     );
+    console.log('Daily Health API result:', {
+      hasData: !!healthData,
+      dataLength: healthData?.length || 0,
+      error: healthError
+    });
 
     let processedActivities = [];
     let processedHealthData = [];
@@ -170,33 +192,57 @@ serve(async (req) => {
     let lastError = null;
     
     // Process activities data
+    console.log('=== PROCESSING ACTIVITIES DATA ===');
     if (activitiesData && Array.isArray(activitiesData) && activitiesData.length > 0) {
       console.log(`Processing ${activitiesData.length} real activities from Activity API`);
+      console.log('Sample activity data:', JSON.stringify(activitiesData[0], null, 2));
       processedActivities = processGarminActivities(activitiesData, user.id);
+      console.log(`Processed ${processedActivities.length} activities successfully`);
       syncStatus = 'activity_api_success';
-    } else if (activitiesError) {
-      lastError = activitiesError;
-      console.log('Activity API failed:', activitiesError);
+    } else {
+      console.log('Activities API failed or returned no data:', {
+        hasData: !!activitiesData,
+        isArray: Array.isArray(activitiesData),
+        length: activitiesData?.length,
+        error: activitiesError
+      });
+      if (activitiesError) {
+        lastError = activitiesError;
+        console.log('Activity API error details:', activitiesError);
+      }
     }
     
     // Process daily health data
+    console.log('=== PROCESSING DAILY HEALTH DATA ===');
     if (healthData && Array.isArray(healthData) && healthData.length > 0) {
       console.log(`Processing ${healthData.length} daily health records from Daily Health Stats API`);
+      console.log('Sample health data:', JSON.stringify(healthData[0], null, 2));
       processedHealthData = processDailyHealthData(healthData, user.id);
+      console.log(`Processed ${processedHealthData.length} health records successfully`);
       if (syncStatus === 'activity_api_success') {
         syncStatus = 'both_apis_success';
       } else {
         syncStatus = 'health_api_success';
       }
-    } else if (healthError) {
-      lastError = lastError || healthError;
-      console.log('Daily Health Stats API failed:', healthError);
+    } else {
+      console.log('Daily Health API failed or returned no data:', {
+        hasData: !!healthData,
+        isArray: Array.isArray(healthData),
+        length: healthData?.length,
+        error: healthError
+      });
+      if (healthError) {
+        lastError = lastError || healthError;
+        console.log('Daily Health API error details:', healthError);
+      }
     }
     
     // If both APIs failed, check for existing data or create fallback
     if (processedActivities.length === 0 && processedHealthData.length === 0) {
+      console.log('=== BOTH APIS FAILED - FALLBACK LOGIC ===');
       console.log('Both APIs failed, checking for existing data...');
       syncStatus = 'apis_failed';
+      console.log('Final errors:', { activitiesError, healthError });
       
       const { data: existingActivities } = await supabase
         .from('garmin_activities')
