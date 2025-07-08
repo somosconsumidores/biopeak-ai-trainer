@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,39 +13,50 @@ serve(async (req) => {
   }
 
   try {
-    const clientId = Deno.env.get('GARMIN_CLIENT_ID');
-    const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET');
-    
-    if (!clientId || !clientSecret) {
-      throw new Error('Garmin client credentials not configured');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    console.log('[garmin-config-fallback] Creating demo OAuth flow...');
+
+    // Generate demo tokens
+    const demoOauthToken = `demo_token_${Date.now()}`;
+    const demoOauthTokenSecret = `demo_secret_${Date.now()}`;
+
+    // Store demo tokens temporarily
+    const { error: insertError } = await supabase
+      .from('oauth_temp_tokens')
+      .upsert({
+        oauth_token: demoOauthToken,
+        oauth_token_secret: demoOauthTokenSecret,
+        provider: 'garmin',
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
+      });
+
+    if (insertError) {
+      console.error('[garmin-config-fallback] Error storing demo token:', insertError);
+      throw new Error(`Erro ao criar token de demonstração: ${insertError.message}`);
     }
 
-    console.log('Garmin config - Fallback mode');
-    console.log('Client ID configured:', !!clientId);
-    console.log('Client Secret configured:', !!clientSecret);
+    // Create demo auth URL that will trigger immediate callback
+    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin-settings';
+    const authUrl = `${redirectUri}?oauth_token=${demoOauthToken}&oauth_verifier=demo_verifier`;
 
-    // Create a simulated authorization URL for development/testing
-    // In production, you would implement the full OAuth 1.0 flow
-    const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin';
-    const mockToken = 'demo_' + Math.random().toString(36).substring(7);
-    
-    // For demo purposes, create a URL that will redirect back with mock parameters
-    const authUrl = `${redirectUri}?oauth_token=${mockToken}&oauth_verifier=demo_verifier`;
-
-    console.log('Generated demo auth URL:', authUrl);
+    console.log('[garmin-config-fallback] Demo flow created successfully');
 
     return new Response(JSON.stringify({ 
+      success: true,
       authUrl,
-      requestToken: mockToken,
-      requestTokenSecret: 'demo_secret',
-      mode: 'demo'
+      message: 'Fluxo de demonstração criado. Redirecionando...',
+      isDemo: true
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Error in garmin-config-fallback function:', error);
+    console.error('[garmin-config-fallback] Error in fallback function:', error);
     return new Response(JSON.stringify({ 
+      success: false,
       error: error.message 
     }), {
       status: 500,

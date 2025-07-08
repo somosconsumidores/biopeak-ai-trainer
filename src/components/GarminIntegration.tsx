@@ -76,7 +76,18 @@ const GarminIntegration = () => {
     setIsConnecting(true);
     try {
       console.log('[GarminIntegration] Calling garmin-config function...');
-      const { data, error } = await supabase.functions.invoke('garmin-config');
+      
+      // Get current session for proper authorization
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Sessão não encontrada. Faça login novamente.');
+      }
+      
+      const { data, error } = await supabase.functions.invoke('garmin-config', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
       
       console.log('[GarminIntegration] Garmin config response:', { data, error });
       
@@ -101,9 +112,18 @@ const GarminIntegration = () => {
       }
     } catch (error) {
       console.error('[GarminIntegration] Error connecting to Garmin:', error);
+      
+      // Check if it's a credential error and provide helpful message
+      const errorMessage = error.message || "Não foi possível conectar com o Garmin Connect.";
+      const isCredentialError = errorMessage.includes('credenciais') || 
+                               errorMessage.includes('CLIENT_ID') || 
+                               errorMessage.includes('CLIENT_SECRET');
+      
       toast({
-        title: "Erro na conexão",
-        description: error.message || "Não foi possível conectar com o Garmin Connect.",
+        title: isCredentialError ? "Credenciais necessárias" : "Erro na conexão",
+        description: isCredentialError 
+          ? "Configure GARMIN_CLIENT_ID e GARMIN_CLIENT_SECRET nas configurações do Supabase."
+          : errorMessage,
         variant: "destructive",
       });
       setIsConnecting(false);
