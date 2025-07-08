@@ -24,6 +24,7 @@ const StravaIntegration = () => {
         isConnected={isConnected}
         isConnecting={isConnecting}
         isSyncing={isSyncing}
+        stravaConfig={stravaConfig}
         syncStatus={syncStatus}
         onConnect={handleStravaConnect}
         onSync={handleSync}
