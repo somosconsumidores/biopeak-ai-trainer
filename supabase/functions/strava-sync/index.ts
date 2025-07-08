@@ -29,8 +29,14 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  // Create supabase client outside try block for error handling
+  // Create supabase client with anon key for JWT validation
   const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+  )
+  
+  // Create service role client for database operations
+  const serviceRoleClient = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   )
@@ -67,16 +73,16 @@ Deno.serve(async (req) => {
     console.log('[strava-sync] User authenticated successfully:', user.id)
 
     // Get last sync info for incremental sync
-    const { lastSyncDate, totalSynced: previouslySynced } = await getLastSyncInfo(supabaseClient, user.id)
+    const { lastSyncDate, totalSynced: previouslySynced } = await getLastSyncInfo(serviceRoleClient, user.id)
     console.log('[strava-sync] Last sync info:', { lastSyncDate, previouslySynced })
     
     // Update sync status to 'in_progress'
-    await updateSyncStatus(supabaseClient, user.id, 'in_progress')
+    await updateSyncStatus(serviceRoleClient, user.id, 'in_progress')
     console.log('[strava-sync] Sync status updated to in_progress')
 
     // Ensure we have a valid access token (handles refresh if needed)
     console.log('[strava-sync] Ensuring valid access token...')
-    const accessToken = await ensureValidAccessToken(supabaseClient, user.id)
+    const accessToken = await ensureValidAccessToken(serviceRoleClient, user.id)
     console.log('[strava-sync] Access token obtained successfully')
 
     // Fetch activities from Strava using helper function with incremental sync
@@ -91,7 +97,7 @@ Deno.serve(async (req) => {
 
     // Store activities in database using helper function
     console.log('[strava-sync] Storing activities in database...')
-    const syncedCount = await storeActivitiesInDatabase(detailedActivities, supabaseClient, user.id)
+    const syncedCount = await storeActivitiesInDatabase(detailedActivities, serviceRoleClient, user.id)
     console.log('[strava-sync] Activities stored:', syncedCount)
     
     // Find most recent activity date for next incremental sync
@@ -102,7 +108,7 @@ Deno.serve(async (req) => {
 
     // Update sync status
     await updateSyncStatus(
-      supabaseClient, 
+      serviceRoleClient, 
       user.id, 
       'completed', 
       mostRecentActivity,
@@ -153,7 +159,7 @@ Deno.serve(async (req) => {
         const token = authHeader.replace('Bearer ', '')
         const { data: { user } } = await supabaseClient.auth.getUser(token)
         if (user) {
-          await updateSyncStatus(supabaseClient, user.id, 'error', undefined, undefined, error?.message)
+          await updateSyncStatus(serviceRoleClient, user.id, 'error', undefined, undefined, error?.message)
         }
       } catch (e) {
         console.log('[strava-sync] Could not update error status:', e)
