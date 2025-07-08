@@ -23,10 +23,15 @@ export async function updateSyncStatus(supabaseClient: any, userId: string, stat
   if (syncedCount !== undefined) updateData.total_activities_synced = syncedCount
   if (errorMessage) updateData.error_message = errorMessage
   
-  await supabaseClient
+  const { error } = await supabaseClient
     .from('strava_sync_status')
     .upsert({
       user_id: userId,
       ...updateData
     })
+    
+  if (error) {
+    console.error('[sync-status] Error updating sync status:', error)
+    throw new Error(`Failed to update sync status: ${error.message}`)
+  }
 }
