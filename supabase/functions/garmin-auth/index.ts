@@ -129,6 +129,16 @@ serve(async (req) => {
 
     throw new Error('Missing OAuth parameters: either code (OAuth 2.0) or oauth_token/oauth_verifier (OAuth 1.0a) are required');
 
+  } catch (error) {
+    console.error('[garmin-auth] Error in OAuth flow:', error);
+    return new Response(JSON.stringify({ 
+      success: false,
+      error: error.message 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 });
 
 // OAuth 2.0 Flow Handler
