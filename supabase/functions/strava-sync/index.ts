@@ -398,13 +398,14 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Create supabase client outside try block for error handling
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+  )
+
   try {
     console.log('[strava-sync] Starting sync process...')
-    
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    )
     console.log('[strava-sync] Supabase client created')
 
     const authHeader = req.headers.get('Authorization')
