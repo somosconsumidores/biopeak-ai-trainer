@@ -69,11 +69,37 @@ const GarminIntegration = () => {
   };
 
   const syncActivities = async () => {
+    console.log('[GarminIntegration] ===== GARMIN SYNC ATTEMPT =====');
+    console.log('[GarminIntegration] Starting sync...');
+    console.log('[GarminIntegration] Current state:', {
+      isConnected,
+      isSyncing,
+      userId: user?.id,
+      hasSession: !!user
+    });
+
     setIsSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('garmin-sync');
+      // Get current session for proper authorization
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Sessão não encontrada. Faça login novamente.');
+      }
       
-      if (error) throw error;
+      console.log('[GarminIntegration] Session token available, calling garmin-sync function...');
+      
+      const { data, error } = await supabase.functions.invoke('garmin-sync', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      
+      console.log('[GarminIntegration] Garmin sync response:', { data, error });
+      
+      if (error) {
+        console.error('[GarminIntegration] Garmin sync error:', error);
+        throw error;
+      }
       
       // Enhanced toast messages based on sync status
       if (data?.success) {
