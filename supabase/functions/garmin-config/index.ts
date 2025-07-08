@@ -147,16 +147,15 @@ serve(async (req) => {
       throw new Error(`Erro ao armazenar parâmetros PKCE: ${insertError.message}`);
     }
 
-    // OAuth 2.0 Authorization URL with PKCE
+    // OAuth 2.0 Authorization URL with PKCE (seguindo especificação oficial)
     const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin-settings';
     
     const authParams = new URLSearchParams({
-      client_id: clientId,
       response_type: 'code',
+      client_id: clientId,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
-      redirect_uri: redirectUri,
-      scope: 'read' // Basic read scope for activities
+      redirect_uri: redirectUri
     });
 
     const authUrl = `https://connect.garmin.com/oauth2Confirm?${authParams.toString()}`;

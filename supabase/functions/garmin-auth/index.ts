@@ -161,7 +161,7 @@ async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId
 
   const codeVerifier = pkceData.oauth_token;
   
-  // Exchange authorization code for access token
+  // Exchange authorization code for access token (seguindo especificação oficial)
   const tokenUrl = 'https://connectapi.garmin.com/di-oauth2-service/oauth/token';
   
   const tokenParams = new URLSearchParams({
@@ -169,7 +169,8 @@ async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId
     client_id: clientId,
     client_secret: clientSecret,
     code: code,
-    code_verifier: codeVerifier
+    code_verifier: codeVerifier,
+    redirect_uri: 'https://preview--biopeak-ai-trainer.lovable.app/garmin-settings'
   });
 
   console.log('[garmin-auth] Exchanging code for tokens...');
