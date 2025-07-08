@@ -238,9 +238,10 @@ async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId
 async function handleOAuth1Flow(oauth_token: string, oauth_verifier: string, user: any, supabase: any, clientId: string, clientSecret: string) {
   console.log('[garmin-auth] ===== OAuth 1.0a LEGACY FLOW =====');
   
-  // Check if this is a demo flow
-  const isDemoFlow = oauth_token.startsWith('demo_token_') && oauth_verifier === 'demo_verifier';
-  console.log('[garmin-auth] Flow type:', isDemoFlow ? 'DEMO' : 'REAL');
+  try {
+    // Check if this is a demo flow
+    const isDemoFlow = oauth_token.startsWith('demo_token_') && oauth_verifier === 'demo_verifier';
+    console.log('[garmin-auth] Flow type:', isDemoFlow ? 'DEMO' : 'REAL');
 
     if (isDemoFlow) {
       console.log('[garmin-auth] Processing demo OAuth flow...');
@@ -439,4 +440,4 @@ async function handleOAuth1Flow(oauth_token: string, oauth_verifier: string, use
       headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
     });
   }
-}
+});
