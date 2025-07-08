@@ -107,13 +107,66 @@ serve(async (req) => {
     }
 
     const { oauth_token, oauth_verifier } = body;
-    console.log('Received OAuth parameters:', { oauth_token: !!oauth_token, oauth_verifier: !!oauth_verifier });
+    console.log('[garmin-auth] Received OAuth parameters:', { 
+      oauth_token: !!oauth_token, 
+      oauth_verifier: !!oauth_verifier,
+      tokenValue: oauth_token?.substring(0, 15) + '...',
+      verifierValue: oauth_verifier
+    });
 
     if (!oauth_token || !oauth_verifier) {
       throw new Error('Missing OAuth parameters: oauth_token and oauth_verifier are required');
     }
 
-    console.log('Processing Garmin OAuth with token:', oauth_token.substring(0, 10) + '...');
+    // Check if this is a demo flow
+    const isDemoFlow = oauth_token.startsWith('demo_token_') && oauth_verifier === 'demo_verifier';
+    console.log('[garmin-auth] Flow type:', isDemoFlow ? 'DEMO' : 'REAL');
+
+    if (isDemoFlow) {
+      console.log('[garmin-auth] Processing demo OAuth flow...');
+      
+      // For demo flow, create demo tokens and store them directly
+      const demoAccessToken = `demo_access_${Date.now()}`;
+      const demoTokenSecret = `demo_secret_${Date.now()}`;
+      
+      console.log('[garmin-auth] Creating demo tokens and storing...');
+      
+      // Store demo tokens directly (skip OAuth exchange for demo)
+      const { error: insertError } = await supabase
+        .from('garmin_tokens')
+        .upsert({
+          user_id: user.id,
+          access_token: demoAccessToken,
+          token_secret: demoTokenSecret,
+          consumer_key: clientId,
+          oauth_verifier: oauth_verifier,
+          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year
+        });
+
+      if (insertError) {
+        console.error('[garmin-auth] Error storing demo tokens:', insertError);
+        throw insertError;
+      }
+
+      // Clean up temp token
+      await supabase
+        .from('oauth_temp_tokens')
+        .delete()
+        .eq('oauth_token', oauth_token);
+
+      console.log('[garmin-auth] Demo flow completed successfully');
+      
+      return new Response(JSON.stringify({ 
+        success: true,
+        message: 'Garmin Connect connected successfully (demo mode)',
+        isDemo: true
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Continue with real OAuth flow for non-demo tokens
+    console.log('[garmin-auth] Processing real OAuth with token:', oauth_token.substring(0, 10) + '...');
 
     // Get stored request token secret from temp table
     console.log('Looking up request token in oauth_temp_tokens...');
