@@ -50,11 +50,9 @@ export function getGarminApiEndpoints() {
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago (API limit)
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
   
   // Recent activities (last 24h with uploadStartTimeInSeconds - respects API 24h limit)
   const uploadStartTime24h = Math.floor(yesterday.getTime() / 1000);
-  const uploadStartTime30d = Math.floor(thirtyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
   return {
@@ -62,12 +60,8 @@ export function getGarminApiEndpoints() {
     activities: [
       // Recent activities (last 24h) - respects uploadStartTimeInSeconds limit
       `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Try 30 days with uploadStartTimeInSeconds (may fail due to API limit)
-      `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime30d}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Historical activities using date range (30 days)
       `${baseUrl}/wellness-api/rest/activities?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-      // Extended historical range (60 days)
-      `${baseUrl}/wellness-api/rest/activities?startDate=${sixtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/activities`
     ],
@@ -76,12 +70,8 @@ export function getGarminApiEndpoints() {
     dailyHealth: [
       // Recent health data (last 24h)
       `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Try 30 days with uploadStartTimeInSeconds (may fail due to API limit)
-      `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime30d}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Historical health data using date range (30 days)
       `${baseUrl}/wellness-api/rest/dailies?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-      // Extended historical range (60 days)
-      `${baseUrl}/wellness-api/rest/dailies?startDate=${sixtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/dailies`
     ],
