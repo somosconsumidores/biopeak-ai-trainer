@@ -32,3 +32,9 @@ verify_jwt = true
 
 [functions.recalculate-backfill-processed-activities]
 verify_jwt = true
+
+[functions.garmin-initiate-backfill]
+verify_jwt = true
+
+[functions.garmin-backfill]
+verify_jwt = true

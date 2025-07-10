@@ -1,168 +1,112 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from '@supabase/supabase-js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+interface InitiateBackfillRequest {
+  monthsBack: number;
+}
+
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('[Garmin Initiate Backfill] Request received:', req.method);
+    console.log('[garmin-initiate-backfill] Starting initiate backfill function');
+
+    // Get environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[garmin-initiate-backfill] Missing environment variables');
+      return new Response(
+        JSON.stringify({ error: 'Missing environment variables' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
 
     // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from auth header
+    // Authenticate user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('Missing Authorization header');
+      console.error('[garmin-initiate-backfill] No authorization header');
+      return new Response(
+        JSON.stringify({ error: 'No authorization header' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      throw new Error('Invalid user token');
+      console.error('[garmin-initiate-backfill] Authentication failed:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Authentication failed' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
-    console.log('[Garmin Initiate Backfill] User authenticated:', user.id);
+    console.log('[garmin-initiate-backfill] User authenticated:', user.id);
 
-    if (req.method === 'POST') {
-      const { monthsBack = 6 } = await req.json();
-      
-      console.log('[Garmin Initiate Backfill] Initiating backfill for', monthsBack, 'months');
-
-      // Check if user has Garmin tokens
-      const { data: tokenData, error: tokenError } = await supabase
-        .from('garmin_tokens')
-        .select('access_token')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (tokenError || !tokenData) {
-        throw new Error('User not connected to Garmin');
-      }
-
-      // Check if user already has backfill records
-      const { data: existingBackfills } = await supabase
-        .from('garmin_backfill_status')
-        .select('id')
-        .eq('user_id', user.id)
-        .limit(1);
-
-      if (existingBackfills && existingBackfills.length > 0) {
-        return new Response(
-          JSON.stringify({ 
-            message: 'User already has backfill records. Use manual backfill for additional periods.',
-            existing: true
-          }),
-          { 
-            status: 200, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
-      }
-
-      // Calculate periods (90-day chunks going back from today)
-      const now = new Date();
-      const periods = [];
-      const maxMonths = Math.min(monthsBack, 6); // Garmin limit is 6 months
-      
-      for (let i = 0; i < maxMonths; i++) {
-        const periodEnd = new Date(now);
-        periodEnd.setMonth(periodEnd.getMonth() - (i * 3)); // 3-month chunks
-        
-        const periodStart = new Date(periodEnd);
-        periodStart.setMonth(periodStart.getMonth() - 3);
-        
-        // Don't go back more than 6 months
-        const sixMonthsAgo = new Date(now);
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        
-        if (periodStart < sixMonthsAgo) {
-          periodStart.setTime(sixMonthsAgo.getTime());
+    // Only handle POST requests
+    if (req.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ error: 'Method not allowed' }),
+        { 
+          status: 405, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
-        
-        if (periodStart >= periodEnd) {
-          break;
+      );
+    }
+
+    // Parse request body
+    const requestBody: InitiateBackfillRequest = await req.json();
+    const monthsBack = requestBody.monthsBack || 6;
+
+    console.log('[garmin-initiate-backfill] Months back requested:', monthsBack);
+
+    // Check if user already has backfill records
+    const { data: existingBackfills, error: checkError } = await supabase
+      .from('garmin_backfill_status')
+      .select('id')
+      .eq('user_id', user.id)
+      .limit(1);
+
+    if (checkError) {
+      console.error('[garmin-initiate-backfill] Error checking existing backfills:', checkError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to check existing backfills' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
-        
-        periods.push({
-          start: periodStart.toISOString(),
-          end: periodEnd.toISOString()
-        });
-      }
+      );
+    }
 
-      console.log('[Garmin Initiate Backfill] Calculated periods:', periods.length);
-
-      const results = [];
-      
-      // Submit backfill requests with delay between them
-      for (let i = 0; i < periods.length; i++) {
-        const period = periods[i];
-        
-        try {
-          console.log(`[Garmin Initiate Backfill] Submitting period ${i + 1}/${periods.length}:`, period);
-          
-          // Call the garmin-backfill function
-          const { data, error } = await supabase.functions.invoke('garmin-backfill', {
-            body: {
-              periodStart: period.start,
-              periodEnd: period.end
-            },
-            headers: {
-              Authorization: authHeader
-            }
-          });
-
-          if (error) {
-            console.error(`[Garmin Initiate Backfill] Error in period ${i + 1}:`, error);
-            results.push({
-              period,
-              success: false,
-              error: error.message
-            });
-          } else {
-            console.log(`[Garmin Initiate Backfill] Period ${i + 1} submitted successfully`);
-            results.push({
-              period,
-              success: true,
-              backfillId: data.backfillId
-            });
-          }
-
-          // Add delay between requests to avoid rate limiting
-          if (i < periods.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-          }
-
-        } catch (error) {
-          console.error(`[Garmin Initiate Backfill] Exception in period ${i + 1}:`, error);
-          results.push({
-            period,
-            success: false,
-            error: error.message
-          });
-        }
-      }
-
-      const successCount = results.filter(r => r.success).length;
-      
+    if (existingBackfills && existingBackfills.length > 0) {
+      console.log('[garmin-initiate-backfill] User already has backfill records');
       return new Response(
         JSON.stringify({ 
-          message: `Initiated backfill for ${successCount}/${periods.length} periods`,
-          results,
-          totalPeriods: periods.length,
-          successfulPeriods: successCount
+          existing: true, 
+          message: 'User already has backfill records. Use manual backfill for additional periods.' 
         }),
         { 
           status: 200, 
@@ -171,18 +115,91 @@ serve(async (req) => {
       );
     }
 
+    // Generate backfill periods (monthly chunks for the specified months)
+    const now = new Date();
+    const periods: { start: Date; end: Date }[] = [];
+
+    for (let i = 0; i < monthsBack; i++) {
+      const periodEnd = new Date(now.getFullYear(), now.getMonth() - i, 0); // Last day of the month
+      const periodStart = new Date(now.getFullYear(), now.getMonth() - i - 1, 1); // First day of the month
+      
+      periods.push({ start: periodStart, end: periodEnd });
+    }
+
+    console.log('[garmin-initiate-backfill] Generated periods:', periods.length);
+
+    // Create backfill records for each period
+    const backfillRecords = periods.map(period => ({
+      user_id: user.id,
+      period_start: period.start.toISOString(),
+      period_end: period.end.toISOString(),
+      status: 'pending',
+      requested_at: new Date().toISOString(),
+      activities_processed: 0
+    }));
+
+    const { data: insertedRecords, error: insertError } = await supabase
+      .from('garmin_backfill_status')
+      .insert(backfillRecords)
+      .select();
+
+    if (insertError) {
+      console.error('[garmin-initiate-backfill] Error inserting backfill records:', insertError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create backfill records' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    const successfulPeriods = insertedRecords?.length || 0;
+
+    console.log('[garmin-initiate-backfill] Successfully created backfill records:', successfulPeriods);
+
+    // Now call the garmin-backfill function for each period to actually start the process
+    let processedCount = 0;
+    for (const record of insertedRecords || []) {
+      try {
+        const { error: backfillError } = await supabase.functions.invoke('garmin-backfill', {
+          body: {
+            periodStart: record.period_start,
+            periodEnd: record.period_end
+          },
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (!backfillError) {
+          processedCount++;
+        } else {
+          console.error('[garmin-initiate-backfill] Error processing period:', backfillError);
+        }
+      } catch (error) {
+        console.error('[garmin-initiate-backfill] Error calling garmin-backfill:', error);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
+      JSON.stringify({
+        success: true,
+        totalPeriods: periods.length,
+        successfulPeriods,
+        processedPeriods: processedCount,
+        message: `Initiated backfill for ${successfulPeriods} periods`
+      }),
       { 
-        status: 405, 
+        status: 200, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
 
   } catch (error) {
-    console.error('[Garmin Initiate Backfill] Error:', error);
+    console.error('[garmin-initiate-backfill] Unexpected error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
