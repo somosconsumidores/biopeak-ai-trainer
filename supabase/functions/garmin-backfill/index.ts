@@ -131,17 +131,70 @@ serve(async (req) => {
         .update({ status: 'in_progress' })
         .eq('id', backfillRecord.id);
 
-      // Make backfill request to Garmin API
+      // Make backfill request to Garmin API using OAuth 1.0
       try {
+        const clientId = Deno.env.get('GARMIN_CLIENT_ID')!;
+        const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET')!;
+        
         const backfillUrl = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
         const summaryStartTimeInSeconds = Math.floor(startDate.getTime() / 1000);
         const summaryEndTimeInSeconds = Math.floor(endDate.getTime() / 1000);
+        
+        const fullUrl = `${backfillUrl}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`;
+        
+        // Generate OAuth 1.0 signature
+        const oauth = {
+          oauth_consumer_key: clientId,
+          oauth_token: tokenData.access_token,
+          oauth_signature_method: 'HMAC-SHA1',
+          oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+          oauth_nonce: Math.random().toString(36).substring(2, 15),
+          oauth_version: '1.0'
+        };
+        
+        // Create base string for signature
+        const params = new URLSearchParams({
+          summaryStartTimeInSeconds: summaryStartTimeInSeconds.toString(),
+          summaryEndTimeInSeconds: summaryEndTimeInSeconds.toString(),
+          ...oauth
+        });
+        
+        const sortedParams = Array.from(params.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+          .join('&');
+        
+        const baseString = `GET&${encodeURIComponent(backfillUrl)}&${encodeURIComponent(sortedParams)}`;
+        const signingKey = `${encodeURIComponent(clientSecret)}&${encodeURIComponent(tokenData.token_secret)}`;
+        
+        // Generate HMAC-SHA1 signature
+        const encoder = new TextEncoder();
+        const signingKeyData = encoder.encode(signingKey);
+        const baseStringData = encoder.encode(baseString);
+        
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          signingKeyData,
+          { name: 'HMAC', hash: 'SHA-1' },
+          false,
+          ['sign']
+        );
+        
+        const signature = await crypto.subtle.sign('HMAC', cryptoKey, baseStringData);
+        const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+        
+        oauth.oauth_signature = signatureBase64;
+        
+        // Build Authorization header
+        const authHeader = 'OAuth ' + Object.entries(oauth)
+          .map(([key, value]) => `${encodeURIComponent(key)}="${encodeURIComponent(value)}"`)
+          .join(', ');
 
-        const response = await fetch(`${backfillUrl}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`, {
+        const response = await fetch(fullUrl, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${tokenData.access_token}`,
-            'Content-Type': 'application/json'
+            'Authorization': authHeader,
+            'Accept': 'application/json'
           }
         });
 
