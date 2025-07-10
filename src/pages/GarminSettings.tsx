@@ -371,7 +371,6 @@ const GarminSettings = () => {
               <Button
                 onClick={() => initiateBackfill(6)}
                 className="flex-1"
-                disabled={!isConnected}
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Iniciar Backfill (6 meses)
