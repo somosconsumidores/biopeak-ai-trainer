@@ -5,21 +5,27 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Activity, Zap, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, Activity, Zap, ExternalLink, RefreshCw, Calendar } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useGarminBackfill } from "@/hooks/useGarminBackfill";
+import GarminBackfillStatus from "@/components/GarminBackfillStatus";
+import GarminManualBackfill from "@/components/GarminManualBackfill";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const GarminSettings = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { initiateBackfill } = useGarminBackfill();
   
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showManualBackfill, setShowManualBackfill] = useState(false);
   const oauthProcessedRef = useRef(false);
 
   useEffect(() => {
@@ -348,6 +354,58 @@ const GarminSettings = () => {
               )}
             </div>
           </Card>
+
+          {/* Backfill Status Component - Show always with different states */}
+          <Card className="glass p-6">
+            <h4 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Historical Data Backfill
+            </h4>
+            <p className="text-sm text-muted-foreground mb-4">
+              {isConnected 
+                ? "Sincronize dados históricos dos últimos 6 meses do Garmin"
+                : "Erro na conexão com a Garmin. Tente reconectar ou use sincronização manual."
+              }
+            </p>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => initiateBackfill(6)}
+                className="flex-1"
+                disabled={!isConnected}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Iniciar Backfill (6 meses)
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowManualBackfill(true)}
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Backfill Manual
+              </Button>
+            </div>
+            {!isConnected && (
+              <p className="text-xs text-orange-400 mt-2">
+                O backfill automático requer conexão ativa, mas o backfill manual permanece disponível.
+              </p>
+            )}
+          </Card>
+
+          {/* Backfill Status Details */}
+          <GarminBackfillStatus 
+            onInitiateBackfill={() => initiateBackfill(6)}
+            onManualBackfill={() => setShowManualBackfill(true)}
+          />
+
+          {/* Manual Backfill Dialog */}
+          <Dialog open={showManualBackfill} onOpenChange={setShowManualBackfill}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Manual Backfill Request</DialogTitle>
+              </DialogHeader>
+              <GarminManualBackfill onClose={() => setShowManualBackfill(false)} />
+            </DialogContent>
+          </Dialog>
 
           {/* Atividades Recentes */}
           {isConnected && (
