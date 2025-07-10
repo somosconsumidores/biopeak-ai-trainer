@@ -58,7 +58,12 @@ const GarminIntegration = () => {
                            !data.access_token.includes('demo_') &&
                            data.access_token.length > 10;
         
-        console.log('[GarminIntegration] Token validation:', { isValidToken, tokenLength: data.access_token?.length });
+        console.log('[GarminIntegration] Token validation:', { 
+          isValidToken, 
+          tokenLength: data.access_token?.length,
+          hasTokenSecret: !!data.token_secret,
+          tokenSecretLength: data.token_secret?.length
+        });
         
         if (isValidToken) {
           console.log('[GarminIntegration] Valid Garmin tokens found - setting connected state');
@@ -82,6 +87,7 @@ const GarminIntegration = () => {
       console.log('[GarminIntegration] Error checking connection:', error);
       setIsConnected(false);
     } finally {
+      console.log('[GarminIntegration] Connection check completed. isConnected:', isConnected);
       setLoading(false);
     }
   };
