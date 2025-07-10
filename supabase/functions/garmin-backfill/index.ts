@@ -59,10 +59,10 @@ serve(async (req) => {
         throw new Error('Start date must be before end date');
       }
 
-      // Check if period is within 90 days limit
+      // Check if period is within 6 months limit (Garmin wellness API limit)
       const daysDifference = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysDifference > 90) {
-        throw new Error('Period cannot exceed 90 days');
+      if (daysDifference > 180) {
+        throw new Error('Period cannot exceed 6 months (180 days)');
       }
 
       // Check if period is not in the future
@@ -70,15 +70,23 @@ serve(async (req) => {
         throw new Error('Start date cannot be in the future');
       }
 
-      // Get user's Garmin tokens
+      // Get user's Garmin OAuth 2.0 tokens
       const { data: tokenData, error: tokenError } = await supabase
         .from('garmin_tokens')
-        .select('access_token, token_secret')
+        .select('access_token, refresh_token, expires_at')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (tokenError || !tokenData) {
         throw new Error('User not connected to Garmin');
+      }
+
+      // Check if token is expired and needs refresh
+      const tokenExpiresAt = new Date(tokenData.expires_at);
+      if (tokenExpiresAt <= now) {
+        console.log('[Garmin Backfill] Token expired, attempting to refresh...');
+        // TODO: Implement token refresh logic here
+        throw new Error('Token expired. Please reconnect to Garmin.');
       }
 
       // Check if backfill already exists for this period
@@ -131,85 +139,41 @@ serve(async (req) => {
         .update({ status: 'in_progress' })
         .eq('id', backfillRecord.id);
 
-      // Make backfill request to Garmin API using OAuth 1.0
+      // Make backfill request to Garmin API using OAuth 2.0 Bearer token
       try {
-        const clientId = Deno.env.get('GARMIN_CLIENT_ID')!;
-        const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET')!;
-        
         const backfillUrl = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
+        
+        // Convert to UNIX timestamps in seconds (as required by Garmin API)
         const summaryStartTimeInSeconds = Math.floor(startDate.getTime() / 1000);
         const summaryEndTimeInSeconds = Math.floor(endDate.getTime() / 1000);
         
         const fullUrl = `${backfillUrl}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`;
         
-        // Generate OAuth 1.0 signature
-        const oauth = {
-          oauth_consumer_key: clientId,
-          oauth_token: tokenData.access_token,
-          oauth_signature_method: 'HMAC-SHA1',
-          oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-          oauth_nonce: Math.random().toString(36).substring(2, 15),
-          oauth_version: '1.0'
-        };
-        
-        // Create base string for signature
-        const params = new URLSearchParams({
-          summaryStartTimeInSeconds: summaryStartTimeInSeconds.toString(),
-          summaryEndTimeInSeconds: summaryEndTimeInSeconds.toString(),
-          ...oauth
-        });
-        
-        const sortedParams = Array.from(params.entries())
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-          .join('&');
-        
-        const baseString = `GET&${encodeURIComponent(backfillUrl)}&${encodeURIComponent(sortedParams)}`;
-        const signingKey = `${encodeURIComponent(clientSecret)}&${encodeURIComponent(tokenData.token_secret)}`;
-        
-        // Generate HMAC-SHA1 signature
-        const encoder = new TextEncoder();
-        const signingKeyData = encoder.encode(signingKey);
-        const baseStringData = encoder.encode(baseString);
-        
-        const cryptoKey = await crypto.subtle.importKey(
-          'raw',
-          signingKeyData,
-          { name: 'HMAC', hash: 'SHA-1' },
-          false,
-          ['sign']
-        );
-        
-        const signature = await crypto.subtle.sign('HMAC', cryptoKey, baseStringData);
-        const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-        
-        oauth.oauth_signature = signatureBase64;
-        
-        // Build Authorization header
-        const authHeader = 'OAuth ' + Object.entries(oauth)
-          .map(([key, value]) => `${encodeURIComponent(key)}="${encodeURIComponent(value)}"`)
-          .join(', ');
+        console.log('[Garmin Backfill] Making OAuth 2.0 request to:', fullUrl);
+        console.log('[Garmin Backfill] Period in seconds:', { summaryStartTimeInSeconds, summaryEndTimeInSeconds });
 
         const response = await fetch(fullUrl, {
           method: 'GET',
           headers: {
-            'Authorization': authHeader,
+            'Authorization': `Bearer ${tokenData.access_token}`,
             'Accept': 'application/json'
           }
         });
 
         console.log('[Garmin Backfill] Garmin API response status:', response.status);
+        console.log('[Garmin Backfill] Response headers:', Object.fromEntries(response.headers.entries()));
 
         if (response.status === 202) {
-          // Backfill request accepted
+          // Backfill request accepted - data will arrive via webhook
           console.log('[Garmin Backfill] Backfill request accepted by Garmin');
           
           return new Response(
             JSON.stringify({ 
-              message: 'Backfill request submitted successfully',
+              message: 'Backfill request submitted successfully. Data will arrive via webhooks.',
               status: 'in_progress',
               backfillId: backfillRecord.id,
-              period: { start: periodStart, end: periodEnd }
+              period: { start: periodStart, end: periodEnd },
+              note: 'Activities will be automatically synced via webhook notifications. Please ensure webhooks are configured in the Garmin Developer Portal.'
             }),
             { 
               status: 202, 
@@ -230,7 +194,7 @@ serve(async (req) => {
             })
             .eq('id', backfillRecord.id);
 
-          throw new Error(`Garmin API error: ${response.status}`);
+          throw new Error(`Garmin API error: ${response.status} - ${errorText}`);
         }
       } catch (apiError) {
         console.error('[Garmin Backfill] API request failed:', apiError);

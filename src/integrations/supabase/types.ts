@@ -233,8 +233,11 @@ export type Database = {
           consumer_key: string | null
           created_at: string
           expires_at: string
+          expires_in: number | null
           id: string
           oauth_verifier: string | null
+          refresh_token: string | null
+          scope: string | null
           token_secret: string
           updated_at: string
           user_id: string
@@ -244,8 +247,11 @@ export type Database = {
           consumer_key?: string | null
           created_at?: string
           expires_at: string
+          expires_in?: number | null
           id?: string
           oauth_verifier?: string | null
+          refresh_token?: string | null
+          scope?: string | null
           token_secret: string
           updated_at?: string
           user_id: string
@@ -255,8 +261,11 @@ export type Database = {
           consumer_key?: string | null
           created_at?: string
           expires_at?: string
+          expires_in?: number | null
           id?: string
           oauth_verifier?: string | null
+          refresh_token?: string | null
+          scope?: string | null
           token_secret?: string
           updated_at?: string
           user_id?: string
@@ -295,6 +304,8 @@ export type Database = {
       }
       oauth_temp_tokens: {
         Row: {
+          code_challenge: string | null
+          code_verifier: string | null
           created_at: string
           expires_at: string
           id: string
@@ -303,6 +314,8 @@ export type Database = {
           provider: string
         }
         Insert: {
+          code_challenge?: string | null
+          code_verifier?: string | null
           created_at?: string
           expires_at?: string
           id?: string
@@ -311,6 +324,8 @@ export type Database = {
           provider?: string
         }
         Update: {
+          code_challenge?: string | null
+          code_verifier?: string | null
           created_at?: string
           expires_at?: string
           id?: string
