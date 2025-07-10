@@ -42,7 +42,8 @@ const GarminIntegration = () => {
       console.log('[GarminIntegration] Token check result:', { 
         hasData: !!data, 
         error: error?.message,
-        tokenValid: data && !error
+        tokenValid: data && !error,
+        data: data ? { ...data, access_token: data.access_token.substring(0, 10) + '...' } : null
       });
 
       if (data && !error) {
@@ -52,8 +53,10 @@ const GarminIntegration = () => {
                            !data.access_token.includes('demo_') &&
                            data.access_token.length > 10;
         
+        console.log('[GarminIntegration] Token validation:', { isValidToken, tokenLength: data.access_token?.length });
+        
         if (isValidToken) {
-          console.log('[GarminIntegration] Valid Garmin tokens found');
+          console.log('[GarminIntegration] Valid Garmin tokens found - setting connected state');
           setIsConnected(true);
           await fetchActivities();
           await checkWebhookStatus();
@@ -67,10 +70,11 @@ const GarminIntegration = () => {
           setIsConnected(false);
         }
       } else {
+        console.log('[GarminIntegration] No valid tokens found - setting disconnected state');
         setIsConnected(false);
       }
     } catch (error) {
-      console.log('[GarminIntegration] No Garmin connection found:', error);
+      console.log('[GarminIntegration] Error checking connection:', error);
       setIsConnected(false);
     } finally {
       setLoading(false);
