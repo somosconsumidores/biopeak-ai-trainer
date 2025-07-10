@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import GarminBackfillStatus from "./GarminBackfillStatus";
 import GarminManualBackfill from "./GarminManualBackfill";
 import BackfillProgress from "./BackfillProgress";
+import GarminWebhookMonitor from "./GarminWebhookMonitor";
 
 const GarminIntegration = () => {
   const { user } = useAuth();
@@ -571,6 +572,16 @@ const GarminIntegration = () => {
             ))}
           </div>
         </Card>
+      )}
+
+      {/* Webhook Monitor */}
+      {isConnected && (
+        <GarminWebhookMonitor />
+      )}
+
+      {/* Backfill Status */}
+      {isConnected && (
+        <GarminBackfillStatus />
       )}
     </div>
   );

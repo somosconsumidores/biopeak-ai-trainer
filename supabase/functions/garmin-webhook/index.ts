@@ -341,6 +341,9 @@ async function updateBackfillStatus(supabase: any, userId: string, activitiesPro
       .in('status', ['pending', 'in_progress'])
       .order('requested_at', { ascending: true });
 
+    // Log webhook call for monitoring
+    console.log(`[updateBackfillStatus] Webhook called at ${new Date().toISOString()} for user ${userId}`);
+
     if (!backfillRecords || backfillRecords.length === 0) {
       console.log('[updateBackfillStatus] No active backfills found');
       return;

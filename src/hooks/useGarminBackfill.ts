@@ -20,6 +20,7 @@ export const useGarminBackfill = () => {
   const [backfillStatus, setBackfillStatus] = useState<BackfillStatus[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitiating, setIsInitiating] = useState(false);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   // Load backfill status
   const loadBackfillStatus = async () => {
@@ -208,13 +209,65 @@ export const useGarminBackfill = () => {
       .reduce((sum, b) => sum + (b.activities_processed || 0), 0)
   };
 
+  // Clean up stuck backfills
+  const cleanupBackfills = async () => {
+    if (!session) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to run cleanup",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    setIsCleaningUp(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('garmin-backfill-cleanup');
+
+      if (error) {
+        console.error('Cleanup error:', error);
+        toast({
+          title: "Cleanup failed",
+          description: error.message || "Failed to run cleanup",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      console.log('Cleanup result:', data);
+
+      toast({
+        title: "Cleanup completed",
+        description: data.message || "Backfill cleanup completed successfully",
+      });
+      
+      // Refresh backfill status
+      await loadBackfillStatus();
+      return true;
+
+    } catch (error) {
+      console.error('Cleanup error:', error);
+      toast({
+        title: "Cleanup failed",
+        description: "Failed to run cleanup process",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsCleaningUp(false);
+    }
+  };
+
   return {
     backfillStatus,
     summary,
     isLoading,
     isInitiating,
+    isCleaningUp,
     requestBackfill,
     initiateBackfill,
-    loadBackfillStatus
+    loadBackfillStatus,
+    cleanupBackfills
   };
 };
