@@ -52,11 +52,11 @@ const GarminIntegration = () => {
       });
 
       if (data && !error) {
-        // Validate token format - check if it's a real OAuth token
+        // For Garmin OAuth 2.0, we only need valid access_token and token_secret
+        // The token_secret contains the refresh token data in JSON format
         const isValidToken = data.access_token && 
                            data.token_secret && 
-                           !data.access_token.includes('demo_') &&
-                           data.access_token.length > 10;
+                           data.access_token.length > 50; // OAuth 2.0 tokens are typically long
         
         console.log('[GarminIntegration] Token validation:', { 
           isValidToken, 
@@ -71,12 +71,8 @@ const GarminIntegration = () => {
           await fetchActivities();
           await checkWebhookStatus();
         } else {
-          console.log('[GarminIntegration] Invalid token format detected - cleaning up');
-          // Clean up invalid tokens
-          await supabase
-            .from('garmin_tokens')
-            .delete()
-            .eq('user_id', user?.id);
+          console.log('[GarminIntegration] Invalid token format detected - NOT cleaning up for debugging');
+          // Don't clean up tokens for debugging purposes
           setIsConnected(false);
         }
       } else {
