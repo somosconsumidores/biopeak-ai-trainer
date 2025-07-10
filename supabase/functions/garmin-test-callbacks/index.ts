@@ -36,34 +36,264 @@ serve(async (req) => {
 
     console.log('[Garmin Test Callbacks] User authenticated:', user.id);
 
-    if (req.method === 'POST') {
-      const { action, callbackURL } = await req.json();
+    try {
+      const { operation } = await req.json();
+      let result;
 
-      if (action === 'test-callback' && callbackURL) {
-        // Test a specific callback URL
-        return await testCallbackURL(supabase, user.id, callbackURL);
+      if (operation === 'diagnose-user') {
+        // Get user tokens and backfill status
+        const { data: userTokens } = await supabase
+          .from('garmin_tokens')
+          .select('user_id, access_token, consumer_key, oauth_verifier, expires_at')
+          .limit(5);
+
+        const { data: pendingBackfills } = await supabase
+          .from('garmin_backfill_status')
+          .select('*')
+          .eq('status', 'pending')
+          .order('requested_at', { ascending: true });
+
+        result = {
+          success: true,
+          message: 'User diagnosis completed',
+          diagnosis: {
+            userTokens: userTokens?.map(t => ({
+              user_id: t.user_id,
+              consumer_key: t.consumer_key,
+              oauth_verifier: t.oauth_verifier,
+              expires_at: t.expires_at,
+              expired: new Date(t.expires_at) <= new Date()
+            })) || [],
+            pendingBackfills: pendingBackfills || [],
+            recommendations: []
+          }
+        };
+
+        // Add recommendations
+        if (!userTokens || userTokens.length === 0) {
+          result.diagnosis.recommendations.push('No Garmin tokens found - users need to connect');
+        }
+        if (pendingBackfills && pendingBackfills.length > 0) {
+          result.diagnosis.recommendations.push(`${pendingBackfills.length} backfills stuck in pending status`);
+        }
+
+      } else if (operation === 'test-callback') {
+        // Test specific callback URL
+        const { callbackURL } = await req.json();
+        if (!callbackURL) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: 'CallbackURL required for testing'
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // Get a user token for testing
+        const { data: userToken } = await supabase
+          .from('garmin_tokens')
+          .select('access_token, user_id')
+          .limit(1)
+          .maybeSingle();
+
+        if (!userToken) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: 'No user tokens available for testing'
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // Test the callback URL
+        try {
+          const response = await fetch(callbackURL, {
+            headers: {
+              'Authorization': `Bearer ${userToken.access_token}`,
+              'Accept': 'application/json'
+            }
+          });
+
+          const responseData = response.ok ? await response.json() : await response.text();
+
+          result = {
+            success: response.ok,
+            message: `Callback test ${response.ok ? 'successful' : 'failed'}`,
+            callbackURL,
+            response: {
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers.entries()),
+              data: responseData,
+              dataType: typeof responseData,
+              isArray: Array.isArray(responseData),
+              count: Array.isArray(responseData) ? responseData.length : 'N/A'
+            }
+          };
+        } catch (fetchError) {
+          result = {
+            success: false,
+            message: 'Callback test failed with network error',
+            callbackURL,
+            error: fetchError.message
+          };
+        }
+
+      } else if (operation === 'test-all-pending') {
+        // Test all pending backfills
+        const { data: pendingBackfills } = await supabase
+          .from('garmin_backfill_status')
+          .select('*')
+          .eq('status', 'pending')
+          .order('requested_at', { ascending: true });
+
+        if (!pendingBackfills || pendingBackfills.length === 0) {
+          result = {
+            success: true,
+            message: 'No pending backfills to test',
+            results: []
+          };
+        } else {
+          const testResults = [];
+          
+          for (const backfill of pendingBackfills) {
+            // Get user token
+            const { data: userToken } = await supabase
+              .from('garmin_tokens')
+              .select('access_token')
+              .eq('user_id', backfill.user_id)
+              .maybeSingle();
+
+            if (!userToken) {
+              testResults.push({
+                backfillId: backfill.id,
+                success: false,
+                message: 'No token found for user'
+              });
+              continue;
+            }
+
+            // Create callback URL for this backfill period
+            const startTime = Math.floor(new Date(backfill.period_start).getTime() / 1000);
+            const endTime = Math.floor(new Date(backfill.period_end).getTime() / 1000);
+            const callbackURL = `https://apis.garmin.com/wellness-api/rest/backfill/activities?uploadStartTimeInSeconds=${startTime}&uploadEndTimeInSeconds=${endTime}`;
+
+            try {
+              const response = await fetch(callbackURL, {
+                headers: {
+                  'Authorization': `Bearer ${userToken.access_token}`,
+                  'Accept': 'application/json'
+                }
+              });
+
+              const responseData = response.ok ? await response.json() : await response.text();
+
+              testResults.push({
+                backfillId: backfill.id,
+                userId: backfill.user_id,
+                period: {
+                  start: backfill.period_start,
+                  end: backfill.period_end
+                },
+                callbackURL,
+                success: response.ok,
+                response: {
+                  status: response.status,
+                  dataCount: Array.isArray(responseData) ? responseData.length : 'N/A',
+                  sample: Array.isArray(responseData) && responseData.length > 0 ? Object.keys(responseData[0]) : 'N/A'
+                }
+              });
+            } catch (fetchError) {
+              testResults.push({
+                backfillId: backfill.id,
+                userId: backfill.user_id,
+                success: false,
+                error: fetchError.message
+              });
+            }
+          }
+
+          result = {
+            success: true,
+            message: `Tested ${pendingBackfills.length} pending backfills`,
+            results: testResults
+          };
+        }
+
+      } else if (operation === 'simulate-webhook') {
+        // Get actual user data for simulation
+        const { data: userTokens } = await supabase
+          .from('garmin_tokens')
+          .select('user_id, consumer_key, oauth_verifier')
+          .limit(1)
+          .maybeSingle();
+          
+        if (!userTokens) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: 'No user tokens found for simulation'
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Try different webhook formats that Garmin might send
+        const webhookFormats = [
+          // Format 1: PING format (what we expect for backfill)
+          {
+            format: 'PING_FORMAT',
+            data: {
+              userId: userTokens.consumer_key || userTokens.oauth_verifier,
+              callbackURL: "https://apis.garmin.com/wellness-api/rest/backfill/activities?uploadStartTimeInSeconds=1672531200&uploadEndTimeInSeconds=1704067200"
+            }
+          },
+          // Format 2: Activities array format (PUSH)
+          {
+            format: 'PUSH_FORMAT',
+            data: {
+              activities: [{
+                userId: userTokens.consumer_key || userTokens.oauth_verifier,
+                callbackURL: "https://apis.garmin.com/wellness-api/rest/backfill/activities?uploadStartTimeInSeconds=1672531200&uploadEndTimeInSeconds=1704067200"
+              }]
+            }
+          }
+        ];
+        
+        console.log('Simulating webhook with multiple formats...');
+        const results = [];
+        
+        for (const format of webhookFormats) {
+          console.log(`Testing ${format.format}:`, format.data);
+          
+          // Call the webhook function
+          const webhookResponse = await supabase.functions.invoke('garmin-webhook', {
+            body: format.data
+          });
+          
+          results.push({
+            format: format.format,
+            data: format.data,
+            response: webhookResponse.data,
+            error: webhookResponse.error
+          });
+        }
+        
+        result = {
+          success: true,
+          message: 'Webhook simulation completed with multiple formats',
+          simulationResults: results
+        };
+      } else {
+        result = { success: false, message: 'Invalid operation' };
       }
 
-      if (action === 'test-all-pending') {
-        // Test all pending backfills for this user
-        return await testAllPendingBackfills(supabase, user.id);
-      }
-
-      if (action === 'simulate-webhook') {
-        // Simulate webhook processing
-        const { userId: webhookUserId, simulatedCallbackURL } = await req.json();
-        return await simulateWebhook(supabase, webhookUserId || user.id, simulatedCallbackURL);
-      }
-
-      if (action === 'diagnose-user') {
-        // Comprehensive user diagnosis
-        return await diagnoseUser(supabase, user.id);
-      }
-    }
-
-    if (req.method === 'GET') {
-      // Return diagnostic information
-      return await getDiagnosticInfo(supabase, user.id);
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     return new Response(

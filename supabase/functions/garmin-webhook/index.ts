@@ -26,7 +26,11 @@ serve(async (req) => {
     console.log('=== Garmin Webhook Request ===');
     console.log('Method:', req.method);
     console.log('URL:', req.url);
+    const url = new URL(req.url);
+    console.log('Query Params:', Object.fromEntries(url.searchParams.entries()));
     console.log('Headers:', Object.fromEntries(req.headers.entries()));
+    console.log('Content-Type:', req.headers.get('content-type'));
+    console.log('User-Agent:', req.headers.get('user-agent'));
     console.log('Timestamp:', new Date().toISOString());
 
     if (req.method === 'POST') {
@@ -46,6 +50,16 @@ serve(async (req) => {
 
       console.log('=== Webhook Data Received ===');
       console.log('Raw webhook data:', JSON.stringify(webhookData, null, 2));
+      console.log('Webhook data keys:', Object.keys(webhookData));
+      console.log('Webhook data type analysis:', {
+        hasActivities: !!webhookData.activities,
+        hasDeregistrations: !!webhookData.deregistrations,
+        hasUserId: !!webhookData.userId,
+        hasCallbackURL: !!webhookData.callbackURL,
+        activityCount: webhookData.activities?.length || 0,
+        webhookFormat: webhookData.activities ? 'PUSH_FORMAT' : 
+                      (webhookData.userId && webhookData.callbackURL) ? 'PING_FORMAT' : 'UNKNOWN'
+      });
 
       // Process webhook notifications using callbackURL pattern
       let processResult = { success: false, message: 'Unknown webhook type' };
@@ -149,31 +163,91 @@ async function processActivityCallbackURL(supabase: any, userId: string, callbac
   console.log('Callback URL:', callbackURL);
 
   try {
-    // Find user by userId (external user id)
-    const { data: tokenData, error: tokenError } = await supabase
+    // Enhanced user mapping - try multiple strategies to find the user
+    console.log('=== Enhanced User Mapping ===');
+    let tokenData = null;
+    
+    // Strategy 1: Search by consumer_key (most likely for Garmin)
+    console.log('Strategy 1: Searching by consumer_key =', userId);
+    const { data: tokenByConsumerKey } = await supabase
       .from('garmin_tokens')
-      .select('user_id, access_token')
-      .eq('consumer_key', userId) // Garmin user ID might be stored in consumer_key
-      .or(`oauth_verifier.eq.${userId}`) // Or in oauth_verifier
+      .select('user_id, access_token, consumer_key, oauth_verifier')
+      .eq('consumer_key', userId)
       .maybeSingle();
-
-    // If not found by external ID, try by access token patterns
+      
+    if (tokenByConsumerKey) {
+      console.log('Found user by consumer_key:', tokenByConsumerKey.user_id);
+      tokenData = tokenByConsumerKey;
+    }
+    
+    // Strategy 2: Search by oauth_verifier if not found
     if (!tokenData) {
-      console.log('User not found by external ID, searching by token patterns...');
-      const { data: allTokens } = await supabase
+      console.log('Strategy 2: Searching by oauth_verifier =', userId);
+      const { data: tokenByVerifier } = await supabase
         .from('garmin_tokens')
         .select('user_id, access_token, consumer_key, oauth_verifier')
-        .limit(10);
+        .eq('oauth_verifier', userId)
+        .maybeSingle();
+        
+      if (tokenByVerifier) {
+        console.log('Found user by oauth_verifier:', tokenByVerifier.user_id);
+        tokenData = tokenByVerifier;
+      }
+    }
+    
+    // Strategy 3: Try to find user by callbackURL pattern (if it contains identifiable info)
+    if (!tokenData && callbackURL) {
+      console.log('Strategy 3: Analyzing callbackURL for user identification');
+      console.log('CallbackURL:', callbackURL);
+      
+      // Extract potential user identifier from URL
+      const urlMatch = callbackURL.match(/userId[=\/]([^&\/]+)/i);
+      if (urlMatch) {
+        const urlUserId = urlMatch[1];
+        console.log('Found userId in URL:', urlUserId);
+        
+        const { data: tokenByUrlUserId } = await supabase
+          .from('garmin_tokens')
+          .select('user_id, access_token, consumer_key, oauth_verifier')
+          .or(`consumer_key.eq.${urlUserId},oauth_verifier.eq.${urlUserId}`)
+          .maybeSingle();
+          
+        if (tokenByUrlUserId) {
+          console.log('Found user by URL userId:', tokenByUrlUserId.user_id);
+          tokenData = tokenByUrlUserId;
+        }
+      }
+    }
+    
+    // Strategy 4: If still not found, get all tokens for manual analysis
+    if (!tokenData) {
+      console.log('Strategy 4: Getting all available tokens for analysis');
+      const { data: allTokens } = await supabase
+        .from('garmin_tokens')
+        .select('user_id, access_token, consumer_key, oauth_verifier, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
       
       console.log('Available tokens for debugging:', allTokens?.map(t => ({
         user_id: t.user_id,
         consumer_key: t.consumer_key,
-        oauth_verifier: t.oauth_verifier?.substring(0, 10) + '...'
+        oauth_verifier: t.oauth_verifier,
+        created_at: t.created_at
       })));
       
-      // Log webhook stats for monitoring
-      await logWebhookCall(supabase, 'ACTIVITY_CALLBACK', null, false, 0, 'User not found for provided userId');
-      return { success: false, message: 'User not found for provided userId' };
+      // For debugging: try the most recent token if we only have one user
+      if (allTokens && allTokens.length === 1) {
+        console.log('Only one token found, using it for debugging purposes');
+        tokenData = allTokens[0];
+      }
+    }
+
+    if (!tokenData) {
+      console.error('=== USER MAPPING FAILED ===');
+      console.error('Searched for userId:', userId);
+      console.error('CallbackURL:', callbackURL);
+      await logWebhookCall(supabase, 'ACTIVITY_CALLBACK', null, false, 0, `User not found for userId: ${userId}`);
+      return { success: false, message: `User not found for userId: ${userId}` };
     }
 
     const dbUserId = tokenData.user_id;
