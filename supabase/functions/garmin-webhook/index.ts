@@ -301,7 +301,9 @@ async function processActivityNotification(supabase: any, userId: string, data: 
 
 async function updateBackfillStatus(supabase: any, userId: string, activitiesProcessed: number) {
   try {
-    // Find any pending or in_progress backfills for this user
+    console.log(`[updateBackfillStatus] Checking backfills for user ${userId}, activities: ${activitiesProcessed}`);
+    
+    // Find pending or in_progress backfills for this user
     const { data: backfillRecords } = await supabase
       .from('garmin_backfill_status')
       .select('*')
@@ -309,29 +311,96 @@ async function updateBackfillStatus(supabase: any, userId: string, activitiesPro
       .in('status', ['pending', 'in_progress'])
       .order('requested_at', { ascending: true });
 
-    if (backfillRecords && backfillRecords.length > 0) {
-      // Update the oldest in_progress backfill
-      const backfillToUpdate = backfillRecords.find(b => b.status === 'in_progress') || backfillRecords[0];
-      
-      console.log('Updating backfill status for record:', backfillToUpdate.id);
-      
-      const { error } = await supabase
-        .from('garmin_backfill_status')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-          activities_processed: (backfillToUpdate.activities_processed || 0) + activitiesProcessed
-        })
-        .eq('id', backfillToUpdate.id);
+    if (!backfillRecords || backfillRecords.length === 0) {
+      console.log('[updateBackfillStatus] No active backfills found');
+      return;
+    }
 
-      if (error) {
-        console.error('Error updating backfill status:', error);
-      } else {
-        console.log('Backfill status updated successfully');
+    console.log(`[updateBackfillStatus] Found ${backfillRecords.length} active backfills`);
+
+    // Get the current timestamp for comparison
+    const now = new Date();
+
+    for (const backfill of backfillRecords) {
+      console.log(`[updateBackfillStatus] Processing backfill ${backfill.id} (${backfill.status})`);
+      
+      // Count actual activities within this backfill period
+      const { data: activitiesInPeriod, error: countError } = await supabase
+        .from('garmin_activities')
+        .select('id', { count: 'exact' })
+        .eq('user_id', userId)
+        .gte('start_date', backfill.period_start)
+        .lte('start_date', backfill.period_end);
+
+      if (countError) {
+        console.error('[updateBackfillStatus] Error counting activities:', countError);
+        continue;
+      }
+
+      const actualActivitiesCount = activitiesInPeriod?.length || 0;
+      console.log(`[updateBackfillStatus] Found ${actualActivitiesCount} activities in backfill period`);
+
+      // If backfill is pending and we have activities, mark as in_progress
+      if (backfill.status === 'pending' && actualActivitiesCount > 0) {
+        console.log(`[updateBackfillStatus] Marking backfill ${backfill.id} as in_progress`);
+        
+        const { error: updateError } = await supabase
+          .from('garmin_backfill_status')
+          .update({
+            status: 'in_progress',
+            activities_processed: actualActivitiesCount,
+            updated_at: now.toISOString()
+          })
+          .eq('id', backfill.id);
+
+        if (updateError) {
+          console.error('[updateBackfillStatus] Error updating to in_progress:', updateError);
+        }
+      }
+      // If backfill is in_progress, update the activities count
+      else if (backfill.status === 'in_progress') {
+        console.log(`[updateBackfillStatus] Updating activities count for backfill ${backfill.id}`);
+        
+        const { error: updateError } = await supabase
+          .from('garmin_backfill_status')
+          .update({
+            activities_processed: actualActivitiesCount,
+            updated_at: now.toISOString()
+          })
+          .eq('id', backfill.id);
+
+        if (updateError) {
+          console.error('[updateBackfillStatus] Error updating activities count:', updateError);
+        }
+
+        // Check if backfill has been in_progress for more than 1 hour (might be complete)
+        const requestedAt = new Date(backfill.requested_at);
+        const hoursSinceRequest = (now.getTime() - requestedAt.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursSinceRequest > 1 && actualActivitiesCount > 0) {
+          console.log(`[updateBackfillStatus] Backfill ${backfill.id} has been in progress for ${hoursSinceRequest.toFixed(1)} hours, considering completion`);
+          
+          // Mark as completed if it's been a while and we have activities
+          const { error: completeError } = await supabase
+            .from('garmin_backfill_status')
+            .update({
+              status: 'completed',
+              completed_at: now.toISOString(),
+              activities_processed: actualActivitiesCount,
+              updated_at: now.toISOString()
+            })
+            .eq('id', backfill.id);
+
+          if (completeError) {
+            console.error('[updateBackfillStatus] Error marking as completed:', completeError);
+          } else {
+            console.log(`[updateBackfillStatus] Marked backfill ${backfill.id} as completed with ${actualActivitiesCount} activities`);
+          }
+        }
       }
     }
   } catch (error) {
-    console.error('Error in updateBackfillStatus:', error);
+    console.error('[updateBackfillStatus] Error in updateBackfillStatus:', error);
   }
 }
 
