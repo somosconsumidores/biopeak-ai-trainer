@@ -12,6 +12,7 @@ import GarminBackfillStatus from "./GarminBackfillStatus";
 import GarminManualBackfill from "./GarminManualBackfill";
 import BackfillProgress from "./BackfillProgress";
 import GarminWebhookMonitor from "./GarminWebhookMonitor";
+import GarminDiagnostics from "./GarminDiagnostics";
 
 const GarminIntegration = () => {
   const { user } = useAuth();
@@ -582,6 +583,11 @@ const GarminIntegration = () => {
       {/* Backfill Status */}
       {isConnected && (
         <GarminBackfillStatus />
+      )}
+
+      {/* Diagnostics */}
+      {isConnected && (
+        <GarminDiagnostics />
       )}
     </div>
   );
