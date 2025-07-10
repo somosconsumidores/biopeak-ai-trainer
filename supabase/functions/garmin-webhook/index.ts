@@ -160,6 +160,9 @@ async function processGarminNotification(supabase: any, data: any) {
   console.log('Summary Type:', data.summaryType);
   console.log('User Access Token:', data.userAccessToken ? 'Present' : 'Missing');
 
+  let userId = null;
+  const startTime = Date.now();
+
   try {
     // Find user by access token with improved error handling
     const { data: tokenData, error: tokenError } = await supabase
@@ -170,6 +173,8 @@ async function processGarminNotification(supabase: any, data: any) {
 
     if (tokenError) {
       console.error('Database error finding user token:', tokenError);
+      // Log webhook stats
+      await logWebhookCall(supabase, data.summaryType, null, false, 0, tokenError.message);
       return { success: false, message: 'Database error finding user' };
     }
 
@@ -186,10 +191,12 @@ async function processGarminNotification(supabase: any, data: any) {
         token_preview: t.access_token?.substring(0, 10) + '...'
       })));
       
+      // Log webhook stats
+      await logWebhookCall(supabase, data.summaryType, null, false, 0, 'User not found for provided token');
       return { success: false, message: 'User not found for provided token' };
     }
 
-    const userId = tokenData.user_id;
+    userId = tokenData.user_id;
     console.log('Found user:', userId);
 
     // Process based on summary type with enhanced error handling
@@ -209,10 +216,46 @@ async function processGarminNotification(supabase: any, data: any) {
         result = { success: true, message: `Logged unknown summary type: ${data.summaryType}` };
     }
 
+    // Log webhook stats
+    await logWebhookCall(
+      supabase, 
+      data.summaryType, 
+      userId, 
+      result.success, 
+      result.activitiesProcessed || 0, 
+      result.success ? null : result.message
+    );
+
     return result;
   } catch (error) {
     console.error('Error processing Garmin notification:', error);
+    // Log webhook stats
+    await logWebhookCall(supabase, data.summaryType, userId, false, 0, error.message);
     return { success: false, message: `Processing error: ${error.message}` };
+  }
+}
+
+// Function to log webhook calls for monitoring
+async function logWebhookCall(
+  supabase: any, 
+  webhookType: string, 
+  userId: string | null, 
+  success: boolean, 
+  activitiesProcessed: number, 
+  errorMessage: string | null
+) {
+  try {
+    await supabase
+      .from('webhook_stats')
+      .insert({
+        webhook_type: webhookType,
+        user_id: userId,
+        success,
+        activities_processed: activitiesProcessed,
+        error_message: errorMessage
+      });
+  } catch (error) {
+    console.error('Error logging webhook call:', error);
   }
 }
 
@@ -320,7 +363,8 @@ async function processActivityNotification(supabase: any, userId: string, data: 
 
     return { 
       success: true, 
-      message: `Successfully processed ${processedCount} activities from webhook (${duplicateCount} duplicates skipped)` 
+      message: `Successfully processed ${processedCount} activities from webhook (${duplicateCount} duplicates skipped)`,
+      activitiesProcessed: processedCount
     };
 
   } catch (error) {

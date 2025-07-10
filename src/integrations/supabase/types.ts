@@ -615,12 +615,49 @@ export type Database = {
           },
         ]
       }
+      webhook_stats: {
+        Row: {
+          activities_processed: number | null
+          call_timestamp: string
+          created_at: string
+          error_message: string | null
+          id: string
+          success: boolean
+          user_id: string | null
+          webhook_type: string
+        }
+        Insert: {
+          activities_processed?: number | null
+          call_timestamp?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          success?: boolean
+          user_id?: string | null
+          webhook_type: string
+        }
+        Update: {
+          activities_processed?: number | null
+          call_timestamp?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          success?: boolean
+          user_id?: string | null
+          webhook_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       cleanup_expired_oauth_tokens: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      cleanup_old_webhook_stats: {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
