@@ -23,12 +23,17 @@ const GarminIntegration = () => {
   const [webhookStatus, setWebhookStatus] = useState([]);
   const [showWebhookUrls, setShowWebhookUrls] = useState(false);
   const [showManualBackfill, setShowManualBackfill] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (user && mounted) {
       checkGarminConnection();
     }
-  }, [user]);
+  }, [user, mounted]);
 
   const checkGarminConnection = async () => {
     console.log('[GarminIntegration] Checking Garmin connection for user:', user?.id);
@@ -347,7 +352,7 @@ const GarminIntegration = () => {
     }
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <Card className="glass p-6">
         <div className="animate-pulse flex space-x-4">
