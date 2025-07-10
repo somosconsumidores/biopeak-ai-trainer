@@ -482,10 +482,31 @@ const GarminIntegration = () => {
 
       {/* Backfill Status Component */}
       {isConnected && (
-        <GarminBackfillStatus
-          onInitiateBackfill={() => initiateBackfill(6)}
-          onManualBackfill={() => setShowManualBackfill(true)}
-        />
+        <Card className="glass p-6">
+          <h4 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Historical Data Backfill
+          </h4>
+          <p className="text-sm text-muted-foreground mb-4">
+            Sincronize dados históricos dos últimos 6 meses do Garmin
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => initiateBackfill(6)}
+              className="flex-1"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Iniciar Backfill (6 meses)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowManualBackfill(true)}
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              Backfill Manual
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* Manual Backfill Dialog */}
