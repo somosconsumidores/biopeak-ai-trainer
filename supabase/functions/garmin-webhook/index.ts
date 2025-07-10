@@ -59,18 +59,48 @@ serve(async (req) => {
         });
       }
 
-      // Process different types of webhook notifications
+      // Process different types of webhook notifications - support multiple notifications
       let processResult = { success: false, message: 'Unknown webhook type' };
 
-      if (webhookData.summaryType && webhookData.userAccessToken) {
-        console.log('Processing webhook with summaryType:', webhookData.summaryType);
-        processResult = await processGarminNotification(supabase, webhookData);
-      } else if (webhookData.userAccessToken && webhookData.summaryType === 'USER_DISCONNECTED') {
-        console.log('Processing user disconnection');
-        processResult = await processUserDisconnection(supabase, webhookData);
+      // Handle multiple notifications in a single webhook call
+      const notifications = webhookData.activityDetails || webhookData.activity || webhookData.deregistrations || [webhookData];
+      
+      if (Array.isArray(notifications)) {
+        console.log(`Processing ${notifications.length} notifications in webhook`);
+        let successCount = 0;
+        let totalProcessed = 0;
+        
+        for (const item of notifications) {
+          const userId = item.userId || item.externalUserId || item.garminUserId;
+          console.log("Processing notification:", { userId, summaryType: item.summaryType });
+          
+          if (item.summaryType && item.userAccessToken) {
+            const result = await processGarminNotification(supabase, item);
+            if (result.success) successCount++;
+            totalProcessed++;
+          } else if (item.userAccessToken && item.summaryType === 'USER_DISCONNECTED') {
+            const result = await processUserDisconnection(supabase, item);
+            if (result.success) successCount++;
+            totalProcessed++;
+          }
+        }
+        
+        processResult = { 
+          success: successCount > 0, 
+          message: `Processed ${successCount}/${totalProcessed} notifications successfully` 
+        };
       } else {
-        console.log('Unknown webhook format, logging for analysis:', Object.keys(webhookData));
-        processResult = { success: true, message: 'Webhook logged for analysis' };
+        // Single notification (original logic)
+        if (webhookData.summaryType && webhookData.userAccessToken) {
+          console.log('Processing webhook with summaryType:', webhookData.summaryType);
+          processResult = await processGarminNotification(supabase, webhookData);
+        } else if (webhookData.userAccessToken && webhookData.summaryType === 'USER_DISCONNECTED') {
+          console.log('Processing user disconnection');
+          processResult = await processUserDisconnection(supabase, webhookData);
+        } else {
+          console.log('Unknown webhook format, logging for analysis:', Object.keys(webhookData));
+          processResult = { success: true, message: 'Webhook logged for analysis' };
+        }
       }
 
       console.log('=== Webhook Processing Complete ===');
