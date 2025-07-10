@@ -1,15 +1,20 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, RefreshCw, ExternalLink, CheckCircle, Webhook } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Activity, RefreshCw, ExternalLink, CheckCircle, Webhook, Calendar } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useGarminBackfill } from "@/hooks/useGarminBackfill";
 import { supabase } from "@/integrations/supabase/client";
+import GarminBackfillStatus from "./GarminBackfillStatus";
+import GarminManualBackfill from "./GarminManualBackfill";
 
 const GarminIntegration = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { initiateBackfill } = useGarminBackfill();
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -17,6 +22,7 @@ const GarminIntegration = () => {
   const [loading, setLoading] = useState(true);
   const [webhookStatus, setWebhookStatus] = useState([]);
   const [showWebhookUrls, setShowWebhookUrls] = useState(false);
+  const [showManualBackfill, setShowManualBackfill] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -473,6 +479,24 @@ const GarminIntegration = () => {
           </div>
         )}
       </Card>
+
+      {/* Backfill Status Component */}
+      {isConnected && (
+        <GarminBackfillStatus
+          onInitiateBackfill={() => initiateBackfill(6)}
+          onManualBackfill={() => setShowManualBackfill(true)}
+        />
+      )}
+
+      {/* Manual Backfill Dialog */}
+      <Dialog open={showManualBackfill} onOpenChange={setShowManualBackfill}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Manual Backfill Request</DialogTitle>
+          </DialogHeader>
+          <GarminManualBackfill onClose={() => setShowManualBackfill(false)} />
+        </DialogContent>
+      </Dialog>
 
       {isConnected && activities.length > 0 && (
         <Card className="glass p-6">

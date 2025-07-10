@@ -113,6 +113,48 @@ export type Database = {
         }
         Relationships: []
       }
+      garmin_backfill_status: {
+        Row: {
+          activities_processed: number | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          period_end: string
+          period_start: string
+          requested_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activities_processed?: number | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          period_end: string
+          period_start: string
+          requested_at?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activities_processed?: number | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          period_end?: string
+          period_start?: string
+          requested_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       garmin_daily_health: {
         Row: {
           active_time_in_seconds: number | null

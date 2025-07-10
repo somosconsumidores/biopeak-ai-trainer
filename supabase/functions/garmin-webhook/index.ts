@@ -206,64 +206,73 @@ async function processActivityNotification(supabase: any, userId: string, data: 
 
     console.log('Processing', activities.length, 'activities');
 
-    // Transform and validate Garmin activity data
-    const processedActivities = activities.map((activity: any, index: number) => {
-      const activityId = activity.activityId || activity.id || activity.activityUuid;
-      if (!activityId) {
-        console.warn(`Activity ${index} missing ID, using timestamp fallback`);
+    let processedCount = 0;
+    let duplicateCount = 0;
+
+    // Process activities individually for better duplicate control
+    for (const activity of activities) {
+      try {
+        const activityId = activity.activityId || activity.id || activity.activityUuid;
+        if (!activityId) {
+          console.warn('Activity missing ID, skipping:', activity);
+          continue;
+        }
+
+        // Check if this activity already exists (duplicate control)
+        const { data: existingActivity } = await supabase
+          .from('garmin_activities')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('garmin_activity_id', parseInt(activityId.toString()))
+          .maybeSingle();
+
+        if (existingActivity) {
+          console.log('Duplicate activity detected, skipping:', activityId);
+          duplicateCount++;
+          continue;
+        }
+
+        const processed = {
+          user_id: userId,
+          garmin_activity_id: parseInt(activityId.toString()),
+          name: activity.activityName || activity.name || activity.activityType?.typeKey || `Webhook Activity`,
+          type: (activity.activityType?.typeKey || activity.activityType || activity.type || 'unknown').toLowerCase(),
+          start_date: activity.startTimeLocal || activity.startTime || activity.beginTimestamp || new Date().toISOString(),
+          distance: activity.distance ? Math.round(parseFloat(activity.distance) * 1000) : null,
+          moving_time: activity.movingDuration || activity.duration || activity.elapsedDuration || null,
+          elapsed_time: activity.elapsedDuration || activity.duration || activity.movingDuration || null,
+          average_speed: activity.averageSpeed ? parseFloat(activity.averageSpeed) : null,
+          max_speed: activity.maxSpeed ? parseFloat(activity.maxSpeed) : null,
+          average_heartrate: activity.averageHR ? parseInt(activity.averageHR) : (activity.avgHR ? parseInt(activity.avgHR) : null),
+          max_heartrate: activity.maxHR ? parseInt(activity.maxHR) : null,
+          calories: activity.calories ? parseInt(activity.calories) : null,
+          total_elevation_gain: activity.elevationGain ? parseFloat(activity.elevationGain) : null,
+        };
+
+        console.log('Processing activity:', {
+          id: processed.garmin_activity_id,
+          name: processed.name,
+          type: processed.type
+        });
+
+        // Insert activity
+        const { error: insertError } = await supabase
+          .from('garmin_activities')
+          .insert(processed);
+
+        if (insertError) {
+          console.error('Database insert error:', insertError);
+        } else {
+          console.log('Successfully processed activity:', processed.garmin_activity_id);
+          processedCount++;
+        }
+
+      } catch (activityError) {
+        console.error('Error processing individual activity:', activityError, activity);
       }
-
-      const processed = {
-        user_id: userId,
-        garmin_activity_id: activityId ? parseInt(activityId.toString()) : (Date.now() + index),
-        name: activity.activityName || activity.name || activity.activityType?.typeKey || `Webhook Activity ${index + 1}`,
-        type: (activity.activityType?.typeKey || activity.activityType || activity.type || 'unknown').toLowerCase(),
-        start_date: activity.startTimeLocal || activity.startTime || activity.beginTimestamp || new Date().toISOString(),
-        distance: activity.distance ? Math.round(parseFloat(activity.distance) * 1000) : null,
-        moving_time: activity.movingDuration || activity.duration || activity.elapsedDuration || null,
-        elapsed_time: activity.elapsedDuration || activity.duration || activity.movingDuration || null,
-        average_speed: activity.averageSpeed ? parseFloat(activity.averageSpeed) : null,
-        max_speed: activity.maxSpeed ? parseFloat(activity.maxSpeed) : null,
-        average_heartrate: activity.averageHR ? parseInt(activity.averageHR) : (activity.avgHR ? parseInt(activity.avgHR) : null),
-        max_heartrate: activity.maxHR ? parseInt(activity.maxHR) : null,
-        calories: activity.calories ? parseInt(activity.calories) : null,
-        total_elevation_gain: activity.elevationGain ? parseFloat(activity.elevationGain) : null,
-      };
-
-      console.log(`Processed activity ${index + 1}:`, {
-        id: processed.garmin_activity_id,
-        name: processed.name,
-        type: processed.type,
-        distance: processed.distance,
-        duration: processed.moving_time
-      });
-
-      return processed;
-    }).filter(activity => activity.garmin_activity_id); // Remove activities without valid IDs
-
-    if (processedActivities.length === 0) {
-      console.error('No valid activities after processing');
-      return { success: false, message: 'No valid activities found in webhook data' };
     }
 
-    console.log(`Inserting ${processedActivities.length} activities into database...`);
-
-    // Insert activities with conflict resolution
-    const { data: insertedData, error: insertError } = await supabase
-      .from('garmin_activities')
-      .upsert(processedActivities, { 
-        onConflict: 'user_id,garmin_activity_id',
-        ignoreDuplicates: false 
-      })
-      .select();
-
-    if (insertError) {
-      console.error('Database insert error:', insertError);
-      return { success: false, message: `Database error: ${insertError.message}` };
-    }
-
-    console.log(`Successfully processed ${processedActivities.length} activities`);
-    console.log('Inserted data preview:', insertedData?.slice(0, 2));
+    console.log(`Finished processing activities. Processed: ${processedCount}, Duplicates: ${duplicateCount}, Total: ${activities.length}`);
 
     // Clean up any remaining demo activities
     const { error: cleanupError } = await supabase
@@ -276,14 +285,53 @@ async function processActivityNotification(supabase: any, userId: string, data: 
       console.warn('Failed to cleanup demo activities:', cleanupError);
     }
 
+    // Check if this might be from a backfill and update backfill status
+    await updateBackfillStatus(supabase, userId, processedCount);
+
     return { 
       success: true, 
-      message: `Successfully processed ${processedActivities.length} activities from webhook` 
+      message: `Successfully processed ${processedCount} activities from webhook (${duplicateCount} duplicates skipped)` 
     };
 
   } catch (error) {
     console.error('Error processing activity notification:', error);
     return { success: false, message: `Activity processing error: ${error.message}` };
+  }
+}
+
+async function updateBackfillStatus(supabase: any, userId: string, activitiesProcessed: number) {
+  try {
+    // Find any pending or in_progress backfills for this user
+    const { data: backfillRecords } = await supabase
+      .from('garmin_backfill_status')
+      .select('*')
+      .eq('user_id', userId)
+      .in('status', ['pending', 'in_progress'])
+      .order('requested_at', { ascending: true });
+
+    if (backfillRecords && backfillRecords.length > 0) {
+      // Update the oldest in_progress backfill
+      const backfillToUpdate = backfillRecords.find(b => b.status === 'in_progress') || backfillRecords[0];
+      
+      console.log('Updating backfill status for record:', backfillToUpdate.id);
+      
+      const { error } = await supabase
+        .from('garmin_backfill_status')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          activities_processed: (backfillToUpdate.activities_processed || 0) + activitiesProcessed
+        })
+        .eq('id', backfillToUpdate.id);
+
+      if (error) {
+        console.error('Error updating backfill status:', error);
+      } else {
+        console.log('Backfill status updated successfully');
+      }
+    }
+  } catch (error) {
+    console.error('Error in updateBackfillStatus:', error);
   }
 }
 
