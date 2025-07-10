@@ -10,6 +10,7 @@ import { useGarminBackfill } from "@/hooks/useGarminBackfill";
 import { supabase } from "@/integrations/supabase/client";
 import GarminBackfillStatus from "./GarminBackfillStatus";
 import GarminManualBackfill from "./GarminManualBackfill";
+import BackfillProgress from "./BackfillProgress";
 
 const GarminIntegration = () => {
   const { user } = useAuth();
@@ -536,6 +537,9 @@ const GarminIntegration = () => {
           <GarminManualBackfill onClose={() => setShowManualBackfill(false)} />
         </DialogContent>
       </Dialog>
+
+      {/* Backfill Progress */}
+      {isConnected && <BackfillProgress />}
 
       {isConnected && activities.length > 0 && (
         <Card className="glass p-6">

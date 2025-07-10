@@ -7,127 +7,40 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, Filter, Search, ChevronLeft, ChevronRight, Activity, Clock, MapPin, Heart, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { formatDistance, formatTime } from "@/utils/stravaUtils";
-
-interface TrainingActivity {
-  id: string;
-  user_id: string;
-  strava_activity_id: number;
-  name: string;
-  type: string;
-  distance: number | null;
-  moving_time: number | null;
-  elapsed_time: number | null;
-  total_elevation_gain: number | null;
-  start_date: string;
-  average_speed: number | null;
-  max_speed: number | null;
-  average_heartrate: number | null;
-  max_heartrate: number | null;
-  calories: number | null;
-  created_at: string;
-  updated_at: string;
-}
+import { useUnifiedActivities } from "@/hooks/useUnifiedActivities";
 
 interface SessionFilters {
   activityType: string;
   dateFrom: string;
   dateTo: string;
   keyword: string;
+  source: string;
 }
 
 const Sessions = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [activities, setActivities] = useState<TrainingActivity[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
+  const { activities, loading, totalCount, activityTypes, loadActivities } = useUnifiedActivities();
   const [currentPage, setCurrentPage] = useState(1);
-  const [activityTypes, setActivityTypes] = useState<string[]>([]);
   const [filters, setFilters] = useState<SessionFilters>({
     activityType: 'all',
     dateFrom: '',
     dateTo: '',
-    keyword: ''
+    keyword: '',
+    source: 'all'
   });
 
   const pageSize = 50;
   const totalPages = Math.ceil(totalCount / pageSize);
 
-  const loadActivities = async (page = 1, currentFilters = filters) => {
-    if (!user) return;
-
-    setLoading(true);
-    try {
-      let query = supabase
-        .from('strava_activities')
-        .select('*', { count: 'exact' })
-        .eq('user_id', user.id)
-        .order('start_date', { ascending: false });
-
-      // Apply filters
-      if (currentFilters.activityType && currentFilters.activityType !== 'all') {
-        query = query.eq('type', currentFilters.activityType);
-      }
-
-      if (currentFilters.dateFrom) {
-        query = query.gte('start_date', `${currentFilters.dateFrom}T00:00:00Z`);
-      }
-
-      if (currentFilters.dateTo) {
-        query = query.lte('start_date', `${currentFilters.dateTo}T23:59:59Z`);
-      }
-
-      if (currentFilters.keyword) {
-        query = query.ilike('name', `%${currentFilters.keyword}%`);
-      }
-
-      // Apply pagination
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      query = query.range(from, to);
-
-      const { data, error, count } = await query;
-
-      if (error) {
-        console.error('Error loading activities:', error);
-        return;
-      }
-
-      setActivities(data || []);
-      setTotalCount(count || 0);
-      setCurrentPage(page);
-    } catch (error) {
-      console.error('Error loading activities:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadActivityTypes = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('strava_activities')
-        .select('type')
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('Error fetching activity types:', error);
-        return;
-      }
-
-      const uniqueTypes = [...new Set(data?.map(item => item.type) || [])];
-      setActivityTypes(uniqueTypes.sort());
-    } catch (error) {
-      console.error('Error fetching activity types:', error);
-    }
+  const handleLoadActivities = (page = 1, currentFilters = filters) => {
+    loadActivities(page, pageSize, currentFilters);
+    setCurrentPage(page);
   };
 
   const applyFilters = () => {
-    loadActivities(1, filters);
+    handleLoadActivities(1, filters);
   };
 
   const clearFilters = () => {
@@ -135,22 +48,22 @@ const Sessions = () => {
       activityType: 'all',
       dateFrom: '',
       dateTo: '',
-      keyword: ''
+      keyword: '',
+      source: 'all'
     };
     setFilters(emptyFilters);
-    loadActivities(1, emptyFilters);
+    handleLoadActivities(1, emptyFilters);
   };
 
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
-      loadActivities(page);
+      handleLoadActivities(page);
     }
   };
 
   useEffect(() => {
     if (user) {
-      loadActivities();
-      loadActivityTypes();
+      handleLoadActivities();
     }
   }, [user]);
 
@@ -189,7 +102,22 @@ const Sessions = () => {
 
         {/* Filters */}
         <Card className="glass p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+            {/* Source Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Fonte</label>
+              <Select value={filters.source} onValueChange={(value) => setFilters(prev => ({ ...prev, source: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as fontes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as fontes</SelectItem>
+                  <SelectItem value="strava">Strava</SelectItem>
+                  <SelectItem value="garmin">Garmin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Activity Type Filter */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Tipo de Atividade</label>
@@ -264,6 +192,12 @@ const Sessions = () => {
                       <Activity className="w-5 h-5 text-primary" />
                       <h3 className="text-lg font-semibold text-foreground">{activity.name}</h3>
                       <Badge variant="outline">{activity.type}</Badge>
+                      <Badge 
+                        variant={activity.source === 'strava' ? 'default' : 'secondary'}
+                        className={activity.source === 'strava' ? 'bg-orange-500/20 text-orange-400' : 'bg-blue-500/20 text-blue-400'}
+                      >
+                        {activity.source === 'strava' ? 'Strava' : 'Garmin'}
+                      </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">{formatDate(activity.start_date)}</p>
                   </div>
@@ -339,7 +273,7 @@ const Sessions = () => {
                 <h3 className="text-lg font-semibold text-foreground mb-2">Nenhuma atividade encontrada</h3>
                 <p className="text-muted-foreground">
                   {totalCount === 0 
-                    ? "Sincronize suas atividades do Strava para vê-las aqui."
+                    ? "Sincronize suas atividades do Strava ou Garmin para vê-las aqui."
                     : "Tente ajustar os filtros para encontrar suas atividades."
                   }
                 </p>
