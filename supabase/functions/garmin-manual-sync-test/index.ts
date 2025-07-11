@@ -1,13 +1,164 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
-import { fetchGarminUserMetrics } from '../garmin-sync/garmin-api.ts';
-import { processUserMetricsData } from '../garmin-sync/data-processor.ts';
-import { insertGarminVo2Max } from '../garmin-sync/database-operations.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Inline Garmin API functions
+async function makeGarminApiCall(url: string, accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
+  console.log(`Making OAuth 2.0 call to: ${url}`);
+  
+  if (!accessToken || accessToken.includes('demo_') || (accessToken.includes('-') && accessToken.length === 36)) {
+    throw new Error('Invalid access token - please reconnect your Garmin account');
+  }
+
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Accept': 'application/json',
+    'User-Agent': 'BioPeak/1.0'
+  };
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers
+  });
+
+  console.log('Response status:', response.status);
+  return response;
+}
+
+function getGarminUserMetricsEndpoints() {
+  const baseUrl = 'https://apis.garmin.com';
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  
+  const uploadStartTime24h = Math.floor(yesterday.getTime() / 1000);
+  const uploadEndTime = Math.floor(now.getTime() / 1000);
+  
+  return [
+    `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
+    `${baseUrl}/wellness-api/rest/userMetrics?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+    `${baseUrl}/wellness-api/rest/userMetrics`
+  ];
+}
+
+async function fetchGarminUserMetrics(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
+  const endpoints = getGarminUserMetricsEndpoints();
+  let data = null;
+  let lastError = null;
+  
+  console.log('=== TESTING USER METRICS ENDPOINTS ===');
+  
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`Testing endpoint: ${endpoint}`);
+      const response = await makeGarminApiCall(endpoint, accessToken, tokenSecret, clientId, clientSecret);
+      
+      if (response.ok) {
+        const responseData = await response.json();
+        console.log('✅ SUCCESS! User Metrics endpoint working');
+        console.log('Response preview:', JSON.stringify(responseData, null, 2).substring(0, 500));
+        
+        if (Array.isArray(responseData)) {
+          data = responseData;
+        } else if (responseData && typeof responseData === 'object') {
+          data = responseData.data || [responseData];
+        }
+        break;
+      } else {
+        const errorText = await response.text();
+        console.error(`❌ Endpoint failed: ${response.status} - ${errorText}`);
+        lastError = `HTTP ${response.status}: ${errorText}`;
+      }
+    } catch (error) {
+      console.error(`💥 Exception on endpoint ${endpoint}:`, error);
+      lastError = error.message;
+    }
+  }
+  
+  return { data, lastError };
+}
+
+// Inline data processor functions
+function processUserMetricsData(userMetricsData: any[], userId: string) {
+  console.log('=== PROCESSING USER METRICS DATA ===');
+  console.log(`Input: ${userMetricsData?.length || 0} user metrics records`);
+  
+  if (!userMetricsData || !Array.isArray(userMetricsData)) {
+    console.log('❌ Invalid user metrics data format');
+    return [];
+  }
+
+  const vo2MaxRecords = [];
+  
+  for (const record of userMetricsData) {
+    console.log('Processing record:', JSON.stringify(record, null, 2));
+    
+    if (record.vo2Max && typeof record.vo2Max === 'number') {
+      const vo2MaxRecord = {
+        user_id: userId,
+        vo2_max_value: record.vo2Max,
+        measurement_date: record.calendarDate || new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      vo2MaxRecords.push(vo2MaxRecord);
+      console.log('✅ Found VO2 Max:', vo2MaxRecord);
+    }
+    
+    // Also check for cycling VO2 Max
+    if (record.vo2MaxCycling && typeof record.vo2MaxCycling === 'number') {
+      const vo2MaxCyclingRecord = {
+        user_id: userId,
+        vo2_max_value: record.vo2MaxCycling,
+        measurement_date: record.calendarDate || new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      vo2MaxRecords.push(vo2MaxCyclingRecord);
+      console.log('✅ Found VO2 Max Cycling:', vo2MaxCyclingRecord);
+    }
+  }
+  
+  console.log(`📊 Processed ${vo2MaxRecords.length} VO2 Max records from ${userMetricsData.length} user metrics records`);
+  return vo2MaxRecords;
+}
+
+// Inline database operations
+async function insertGarminVo2Max(supabase: any, vo2MaxData: any[]) {
+  if (!vo2MaxData || vo2MaxData.length === 0) {
+    console.log('No VO2 Max data to insert');
+    return { success: true, insertedCount: 0 };
+  }
+
+  console.log(`Attempting to insert ${vo2MaxData.length} VO2 Max records`);
+
+  try {
+    const { data, error } = await supabase
+      .from('garmin_vo2_max')
+      .upsert(vo2MaxData, {
+        onConflict: 'user_id,measurement_date',
+        ignoreDuplicates: false
+      })
+      .select();
+
+    if (error) {
+      console.error('❌ Error inserting VO2 Max data:', error);
+      throw error;
+    }
+
+    console.log(`✅ Successfully inserted ${data?.length || 0} VO2 Max records`);
+    return { success: true, insertedCount: data?.length || 0, data };
+  } catch (error) {
+    console.error('💥 Exception inserting VO2 Max data:', error);
+    throw error;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -66,7 +217,8 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           message: `Successfully synced ${processedVo2MaxData.length} VO2 Max records`,
-          data: processedVo2MaxData
+          data: processedVo2MaxData,
+          insertResult
         }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
