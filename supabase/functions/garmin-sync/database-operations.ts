@@ -145,3 +145,64 @@ export async function verifyInsertedData(supabase: any, userId: string) {
 
   return { activities: activityData, dailyHealth: healthData };
 }
+
+// Insert Garmin VO2 Max data
+export async function insertGarminVo2Max(supabase: any, vo2MaxData: any[]) {
+  console.log(`Processing ${vo2MaxData.length} VO2 Max records for insertion`);
+  if (vo2MaxData.length > 0) {
+    console.log('Sample VO2 Max data:', JSON.stringify(vo2MaxData[0], null, 2));
+  }
+
+  if (vo2MaxData.length === 0) {
+    console.log('No VO2 Max data to insert');
+    return [];
+  }
+
+  // Insert VO2 Max data with upsert to handle duplicates
+  const { data: insertedData, error: insertError } = await supabase
+    .from('garmin_vo2_max')
+    .upsert(vo2MaxData, { 
+      onConflict: 'user_id,measurement_date',
+      ignoreDuplicates: false 
+    })
+    .select();
+
+  if (insertError) {
+    console.error('Error inserting VO2 Max data:', insertError);
+    console.error('Error details:', JSON.stringify(insertError, null, 2));
+    
+    // If upsert fails, try individual inserts
+    console.log('Attempting individual VO2 Max inserts as fallback...');
+    let successCount = 0;
+    
+    for (const vo2MaxRecord of vo2MaxData) {
+      try {
+        const { error: singleError } = await supabase
+          .from('garmin_vo2_max')
+          .insert(vo2MaxRecord)
+          .select();
+          
+        if (!singleError) {
+          successCount++;
+        } else {
+          console.error(`Failed to insert VO2 Max record ${vo2MaxRecord.measurement_date}:`, singleError);
+        }
+      } catch (singleInsertError) {
+        console.error(`Exception inserting VO2 Max record ${vo2MaxRecord.measurement_date}:`, singleInsertError);
+      }
+    }
+    
+    console.log(`Successfully inserted ${successCount} VO2 Max records individually`);
+    
+    if (successCount === 0) {
+      throw new Error(`Failed to insert any VO2 Max data: ${insertError.message}`);
+    }
+  } else {
+    console.log('Successfully upserted VO2 Max data:', insertedData?.length || vo2MaxData.length);
+    if (insertedData && insertedData.length > 0) {
+      console.log('Inserted VO2 Max data sample:', JSON.stringify(insertedData[0], null, 2));
+    }
+  }
+
+  return insertedData;
+}

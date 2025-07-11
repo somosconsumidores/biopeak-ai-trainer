@@ -225,6 +225,39 @@ export function processDailyHealthData(healthData: any, userId: string) {
   });
 }
 
+// Process VO2 Max data from Daily Health Stats API response
+export function processVo2MaxData(healthData: any, userId: string) {
+  console.log('Processing VO2 Max data for user:', userId);
+  console.log('Raw health data for VO2 Max:', JSON.stringify(healthData, null, 2));
+  
+  if (!Array.isArray(healthData)) {
+    console.warn('Health data is not an array:', typeof healthData);
+    return [];
+  }
+
+  const vo2MaxRecords = [];
+  
+  for (const dayData of healthData) {
+    // Look for VO2 Max in different possible field names from Garmin API
+    const vo2MaxValue = dayData.vo2Max || dayData.vo2MaxValue || dayData.maxOxygenUptake || 
+                       dayData.fitnessAge?.vo2Max || dayData.wellness?.vo2Max || null;
+    
+    if (vo2MaxValue && vo2MaxValue > 0) {
+      const vo2MaxRecord = {
+        user_id: userId,
+        vo2_max_value: parseFloat(vo2MaxValue.toString()),
+        measurement_date: dayData.summaryDate || dayData.calendarDate || new Date().toISOString().split('T')[0]
+      };
+      
+      console.log('Found VO2 Max data:', vo2MaxRecord);
+      vo2MaxRecords.push(vo2MaxRecord);
+    }
+  }
+  
+  console.log(`Processed ${vo2MaxRecords.length} VO2 Max records`);
+  return vo2MaxRecords;
+}
+
 // Create fallback activities for demo purposes
 export function createFallbackActivities(userId: string) {
   console.log('Creating fallback activities for user:', userId);

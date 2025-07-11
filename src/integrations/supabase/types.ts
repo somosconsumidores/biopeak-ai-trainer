@@ -293,6 +293,33 @@ export type Database = {
         }
         Relationships: []
       }
+      garmin_vo2_max: {
+        Row: {
+          created_at: string
+          id: string
+          measurement_date: string
+          updated_at: string
+          user_id: string
+          vo2_max_value: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          measurement_date: string
+          updated_at?: string
+          user_id: string
+          vo2_max_value: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          measurement_date?: string
+          updated_at?: string
+          user_id?: string
+          vo2_max_value?: number
+        }
+        Relationships: []
+      }
       garmin_webhook_config: {
         Row: {
           created_at: string

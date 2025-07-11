@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTrainingSessions, TrainingSession } from '@/hooks/useTrainingSessions';
 import { useGarminActivities, GarminActivity } from '@/hooks/useGarminActivities';
+import { useLatestVo2Max } from '@/hooks/useGarminVo2Max';
 
 interface DashboardMetrics {
   performancePeak: number;
@@ -24,8 +25,9 @@ interface DashboardMetrics {
 export function useDashboardMetrics(): DashboardMetrics & { loading: boolean } {
   const { sessions, loading: sessionsLoading } = useTrainingSessions();
   const { activities, loading: activitiesLoading } = useGarminActivities();
+  const { data: latestVo2Max, isLoading: vo2MaxLoading } = useLatestVo2Max();
 
-  const loading = sessionsLoading || activitiesLoading;
+  const loading = sessionsLoading || activitiesLoading || vo2MaxLoading;
 
   console.log('[useDashboardMetrics] Data:', { 
     sessionsCount: sessions.length, 
@@ -106,7 +108,7 @@ export function useDashboardMetrics(): DashboardMetrics & { loading: boolean } {
     const performanceChange = previousWeekAvg > 0 ? 
       ((lastWeekAvg - previousWeekAvg) / previousWeekAvg) * 100 : 0;
 
-    // Estimate VO2 Max from average speed and heart rate data
+    // Filter data with heart rate for calculations
     const dataWithHR = dataSource.filter(item => {
       if (isGarminData) {
         const activity = item as GarminActivity;
@@ -115,8 +117,9 @@ export function useDashboardMetrics(): DashboardMetrics & { loading: boolean } {
       const session = item as TrainingSession;
       return session.average_heartrate && session.average_speed;
     });
-    
-    const estimatedVO2 = dataWithHR.length > 0 ? 
+
+    // Use real VO2 Max from Garmin if available, otherwise estimate from activities
+    const estimatedVO2 = latestVo2Max || (dataWithHR.length > 0 ? 
       dataWithHR.reduce((sum, item) => {
         const speed = isGarminData ? 
           (item as GarminActivity).average_speed || 0 : 
@@ -125,11 +128,11 @@ export function useDashboardMetrics(): DashboardMetrics & { loading: boolean } {
           (item as GarminActivity).average_heartrate || 150 : 
           (item as TrainingSession).average_heartrate || 150;
         
-        // Simple VO2 max estimation formula
+        // Simple VO2 max estimation formula (only used as fallback)
         const speedKmh = speed * 3.6;
         const hrReserve = Math.max(0, 190 - hr);
         return sum + (speedKmh * 1.8 + hrReserve * 0.3);
-      }, 0) / dataWithHR.length : 45;
+      }, 0) / dataWithHR.length : 45);
 
     // Calculate average heart rate
     const avgHeartRate = dataWithHR.length > 0 ?
@@ -270,7 +273,7 @@ export function useDashboardMetrics(): DashboardMetrics & { loading: boolean } {
       totalDuration,
       recentSessions: recentSessionsFormatted
     };
-  }, [sessions, activities]);
+  }, [sessions, activities, latestVo2Max]);
 
   return {
     ...metrics,

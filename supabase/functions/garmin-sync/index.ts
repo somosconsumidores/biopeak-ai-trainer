@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
 import { fetchGarminActivities, fetchGarminDailyHealth, checkGarminPermissions } from './garmin-api.ts';
-import { processGarminActivities, processDailyHealthData, createFallbackActivities, createFallbackDailyHealth } from './data-processor.ts';
-import { insertGarminActivities, insertGarminDailyHealth, verifyInsertedData } from './database-operations.ts';
+import { processGarminActivities, processDailyHealthData, processVo2MaxData, createFallbackActivities, createFallbackDailyHealth } from './data-processor.ts';
+import { insertGarminActivities, insertGarminDailyHealth, insertGarminVo2Max, verifyInsertedData } from './database-operations.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -214,10 +214,17 @@ serve(async (req) => {
     
     // Process daily health data
     console.log('=== PROCESSING DAILY HEALTH DATA ===');
+    let processedVo2MaxData = [];
     if (healthData && Array.isArray(healthData) && healthData.length > 0) {
       console.log(`Processing ${healthData.length} daily health records from Daily Health Stats API`);
       console.log('Sample health data:', JSON.stringify(healthData[0], null, 2));
       processedHealthData = processDailyHealthData(healthData, user.id);
+      
+      // Process VO2 Max data from the same health data
+      console.log('=== PROCESSING VO2 MAX DATA ===');
+      processedVo2MaxData = processVo2MaxData(healthData, user.id);
+      console.log(`Found ${processedVo2MaxData.length} VO2 Max records`);
+      
       console.log(`Processed ${processedHealthData.length} health records successfully`);
       if (syncStatus === 'activity_api_success') {
         syncStatus = 'both_apis_success';
@@ -274,6 +281,7 @@ serve(async (req) => {
     // Insert data into database
     let insertedActivities = 0;
     let insertedHealthRecords = 0;
+    let insertedVo2MaxRecords = 0;
     
     if (processedActivities.length > 0) {
       console.log(`Inserting ${processedActivities.length} activities into database...`);
@@ -287,15 +295,22 @@ serve(async (req) => {
       insertedHealthRecords = processedHealthData.length;
     }
     
+    if (processedVo2MaxData.length > 0) {
+      console.log(`Inserting ${processedVo2MaxData.length} VO2 Max records into database...`);
+      await insertGarminVo2Max(supabase, processedVo2MaxData);
+      insertedVo2MaxRecords = processedVo2MaxData.length;
+    }
+    
     // Verify insertion
-    if (insertedActivities > 0 || insertedHealthRecords > 0) {
+    if (insertedActivities > 0 || insertedHealthRecords > 0 || insertedVo2MaxRecords > 0) {
       await verifyInsertedData(supabase, user.id);
     }
 
     // Get final counts
-    const [{ data: activityCount }, { data: healthCount }] = await Promise.all([
+    const [{ data: activityCount }, { data: healthCount }, { data: vo2MaxCount }] = await Promise.all([
       supabase.from('garmin_activities').select('id', { count: 'exact' }).eq('user_id', user.id),
-      supabase.from('garmin_daily_health').select('id', { count: 'exact' }).eq('user_id', user.id)
+      supabase.from('garmin_daily_health').select('id', { count: 'exact' }).eq('user_id', user.id),
+      supabase.from('garmin_vo2_max').select('id', { count: 'exact' }).eq('user_id', user.id)
     ]);
 
     const responseMessage = {
@@ -303,8 +318,10 @@ serve(async (req) => {
       syncStatus,
       processedActivities: insertedActivities,
       processedHealthRecords: insertedHealthRecords,
+      processedVo2MaxRecords: insertedVo2MaxRecords,
       totalActivities: activityCount?.length || 0,
       totalHealthRecords: healthCount?.length || 0,
+      totalVo2MaxRecords: vo2MaxCount?.length || 0,
       message: getSyncMessage(syncStatus, insertedActivities, insertedHealthRecords),
       lastError: lastError || null,
       recommendation: getRecommendation(syncStatus),
