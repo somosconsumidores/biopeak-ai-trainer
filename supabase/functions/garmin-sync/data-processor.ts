@@ -10,25 +10,63 @@ export function processGarminActivities(activitiesData: any, userId: string) {
     return [];
   }
 
-  return activitiesData.map((activity: any) => {
+  return activitiesData.map((activity: any, index: number) => {
+    console.log(`\n=== PROCESSING ACTIVITY ${index + 1}/${activitiesData.length} ===`);
+    console.log('Raw activity data:', JSON.stringify(activity, null, 2));
+    console.log('Available keys:', Object.keys(activity));
+    
+    // Check for different possible data structures
+    const activityId = activity.activityId || activity.id || activity.activityUUID || Math.floor(Math.random() * 1000000);
+    const activityName = activity.activityName || activity.name || activity.summary?.activityName || 'Untitled Activity';
+    const activityType = activity.activityType?.typeKey || activity.type || activity.summary?.activityType || 'Unknown';
+    const startDate = activity.startTimeLocal || activity.startTime || activity.summary?.startTimeLocal || new Date().toISOString();
+    
+    // Enhanced data extraction with multiple fallbacks
+    const distance = activity.distance || activity.summary?.distance || activity.activitySummary?.distance || null;
+    const movingTime = activity.movingDuration || activity.duration || activity.summary?.movingDuration || activity.activitySummary?.movingDuration || null;
+    const elapsedTime = activity.elapsedDuration || activity.duration || activity.summary?.elapsedDuration || activity.activitySummary?.elapsedDuration || null;
+    const elevationGain = activity.elevationGain || activity.summary?.elevationGain || activity.activitySummary?.elevationGain || null;
+    const avgSpeed = activity.averageSpeed || activity.summary?.averageSpeed || activity.activitySummary?.averageSpeed || null;
+    const maxSpeed = activity.maxSpeed || activity.summary?.maxSpeed || activity.activitySummary?.maxSpeed || null;
+    const avgHR = activity.averageHR || activity.avgHeartRate || activity.summary?.averageHR || activity.activitySummary?.averageHR || null;
+    const maxHR = activity.maxHR || activity.maxHeartRate || activity.summary?.maxHR || activity.activitySummary?.maxHR || null;
+    const calories = activity.calories || activity.summary?.calories || activity.activitySummary?.calories || null;
+    
+    console.log('Extracted values:', {
+      activityId,
+      activityName,
+      activityType,
+      startDate,
+      distance,
+      movingTime,
+      elapsedTime,
+      elevationGain,
+      avgSpeed,
+      maxSpeed,
+      avgHR,
+      maxHR,
+      calories
+    });
+    
     const processedActivity = {
       user_id: userId,
-      garmin_activity_id: activity.activityId || activity.id || Math.floor(Math.random() * 1000000),
-      name: activity.activityName || activity.name || 'Untitled Activity',
-      type: activity.activityType?.typeKey || activity.type || 'Unknown',
-      start_date: activity.startTimeLocal || activity.startTime || new Date().toISOString(),
-      distance: activity.distance ? parseFloat(activity.distance) : null,
-      moving_time: activity.movingDuration || activity.duration || null,
-      elapsed_time: activity.elapsedDuration || activity.duration || null,
-      total_elevation_gain: activity.elevationGain ? parseFloat(activity.elevationGain) : null,
-      average_speed: activity.averageSpeed ? parseFloat(activity.averageSpeed) : null,
-      max_speed: activity.maxSpeed ? parseFloat(activity.maxSpeed) : null,
-      average_heartrate: activity.averageHR || activity.avgHeartRate || null,
-      max_heartrate: activity.maxHR || activity.maxHeartRate || null,
-      calories: activity.calories ? parseFloat(activity.calories) : null
+      garmin_activity_id: activityId,
+      name: activityName,
+      type: activityType,
+      start_date: startDate,
+      distance: distance ? parseFloat(distance) : null,
+      moving_time: movingTime,
+      elapsed_time: elapsedTime,
+      total_elevation_gain: elevationGain ? parseFloat(elevationGain) : null,
+      average_speed: avgSpeed ? parseFloat(avgSpeed) : null,
+      max_speed: maxSpeed ? parseFloat(maxSpeed) : null,
+      average_heartrate: avgHR,
+      max_heartrate: maxHR,
+      calories: calories ? parseFloat(calories) : null
     };
     
-    console.log('Processed activity:', processedActivity);
+    console.log('Final processed activity:', processedActivity);
+    console.log(`=== ACTIVITY ${index + 1} PROCESSING COMPLETE ===\n`);
     return processedActivity;
   });
 }
