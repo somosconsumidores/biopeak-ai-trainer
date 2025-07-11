@@ -49,8 +49,10 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       }
     }
     
-    // Extract timestamps - Garmin uses various formats
-    const startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || new Date().toISOString();
+    // Extract timestamps - Garmin uses various formats and field names
+    const startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || 
+                     activity.startTime || activity.activityStartTime || activity.startDateTime ||
+                     activity.dateTime || activity.activityDate || new Date().toISOString();
     
     // Extract activity metrics with Garmin-specific field names (checking both possible formats)
     const distance = activity.distance || activity.distanceInMeters || activity.distanceInKilometers || null;
