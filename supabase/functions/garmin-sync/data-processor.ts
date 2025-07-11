@@ -49,8 +49,28 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       }
     }
     
-    // Extract timestamps - Garmin uses various formats
-    const startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || new Date().toISOString();
+    // Extract timestamps - Handle Unix timestamp format from startTimeInSeconds
+    let startDate = null;
+    if (activity.startTimeInSeconds) {
+      // Convert Unix timestamp (seconds since epoch) to ISO string
+      startDate = new Date(activity.startTimeInSeconds * 1000).toISOString();
+      console.log(`Converted Unix timestamp ${activity.startTimeInSeconds} to ISO date: ${startDate}`);
+    } else if (activity.startTimeGMT) {
+      startDate = activity.startTimeGMT;
+    } else if (activity.startTimeLocal) {
+      startDate = activity.startTimeLocal;
+    } else if (activity.beginTimestamp) {
+      startDate = activity.beginTimestamp;
+    }
+    
+    // Log the date extraction process
+    console.log('Date extraction details:', {
+      startTimeInSeconds: activity.startTimeInSeconds,
+      startTimeGMT: activity.startTimeGMT,
+      startTimeLocal: activity.startTimeLocal,
+      beginTimestamp: activity.beginTimestamp,
+      finalStartDate: startDate
+    });
     
     // Extract activity metrics with Garmin-specific field names (checking both possible formats)
     const distance = activity.distance || activity.distanceInMeters || activity.distanceInKilometers || null;
@@ -107,6 +127,7 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       mapped_activityName: activityName,
       original_activityType: activity.activityType,
       mapped_activityType: activityType,
+      original_startTimeInSeconds: activity.startTimeInSeconds,
       original_startTimeGMT: activity.startTimeGMT,
       original_startTimeLocal: activity.startTimeLocal,
       mapped_startDate: startDate,
