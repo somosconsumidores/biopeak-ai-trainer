@@ -2,14 +2,29 @@
 
 // Process Activity API response data
 export function processGarminActivities(activitiesData: any, userId: string) {
+  console.log('=== GARMIN ACTIVITIES PROCESSING START ===');
   console.log('Processing Garmin activities for user:', userId);
   console.log('Raw activities data type:', typeof activitiesData);
   console.log('Raw activities data length:', Array.isArray(activitiesData) ? activitiesData.length : 'Not array');
-  console.log('Raw activities data structure:', JSON.stringify(activitiesData, null, 2));
+  console.log('Raw activities data structure (first 1000 chars):', JSON.stringify(activitiesData, null, 2).substring(0, 1000));
   
   if (!Array.isArray(activitiesData)) {
     console.warn('Activities data is not an array:', typeof activitiesData);
-    return [];
+    console.log('Attempting to extract array from object structure...');
+    
+    // Try to find activities in common object structures
+    if (activitiesData && typeof activitiesData === 'object') {
+      const possibleArrays = activitiesData.activities || activitiesData.data || activitiesData.results || activitiesData.items;
+      if (Array.isArray(possibleArrays)) {
+        console.log('Found activities array in object structure, length:', possibleArrays.length);
+        activitiesData = possibleArrays;
+      } else {
+        console.log('Converting single object to array');
+        activitiesData = [activitiesData];
+      }
+    } else {
+      return [];
+    }
   }
 
   return activitiesData.map((activity: any, index: number) => {
