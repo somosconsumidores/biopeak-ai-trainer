@@ -27,7 +27,7 @@ export function processGarminActivities(activitiesData: any, userId: string) {
     }
   }
 
-  const processedActivities = activitiesData.map((activity: any, index: number) => {
+  return activitiesData.map((activity: any, index: number) => {
     console.log(`\n=== PROCESSING ACTIVITY ${index + 1}/${activitiesData.length} ===`);
     console.log('Raw activity keys:', Object.keys(activity || {}));
     console.log('Full activity object:', JSON.stringify(activity, null, 2));
@@ -49,25 +49,8 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       }
     }
     
-    // Extract timestamps - Garmin uses various formats and field names
-    let startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || 
-                   activity.startTime || activity.activityStartTime || activity.startDateTime ||
-                   activity.dateTime || activity.activityDate || activity.summaryDateTime ||
-                   activity.calendarDate;
-    
-    // If no date found, log the issue and skip this activity
-    if (!startDate) {
-      console.warn('No date found for activity, skipping:', {
-        activityId: activity.activityId,
-        availableFields: Object.keys(activity)
-      });
-      return null; // Skip this activity instead of creating invalid data
-    }
-    
-    console.log('Activity date extraction successful:', {
-      activityId: activity.activityId,
-      extracted_startDate: startDate
-    });
+    // Extract timestamps - Garmin uses various formats
+    const startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || new Date().toISOString();
     
     // Extract activity metrics with Garmin-specific field names (checking both possible formats)
     const distance = activity.distance || activity.distanceInMeters || activity.distanceInKilometers || null;
@@ -182,11 +165,7 @@ export function processGarminActivities(activitiesData: any, userId: string) {
     console.log('Final processed activity:', processedActivity);
     console.log(`=== ACTIVITY ${index + 1} PROCESSING COMPLETE ===\n`);
     return processedActivity;
-  }).filter(activity => activity !== null); // Remove skipped activities
-  
-  console.log(`=== GARMIN ACTIVITIES PROCESSING COMPLETE ===`);
-  console.log(`Processed ${processedActivities.length} valid activities out of ${activitiesData.length} total`);
-  return processedActivities;
+  });
 }
 
 // Process Daily Health Stats API response data
