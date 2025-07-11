@@ -225,10 +225,13 @@ export function processDailyHealthData(healthData: any, userId: string) {
   });
 }
 
-// Process VO2 Max data from Daily Health Stats API response (deprecated - use processUserMetricsData)
+// Process VO2 Max data from Daily Health Stats API response (fallback for User Metrics)
 export function processVo2MaxData(healthData: any, userId: string) {
+  console.log('=== VO2 MAX FALLBACK PROCESSING START ===');
   console.log('Processing VO2 Max data for user:', userId);
-  console.log('Raw health data for VO2 Max:', JSON.stringify(healthData, null, 2));
+  console.log('Raw health data type:', typeof healthData);
+  console.log('Raw health data length:', Array.isArray(healthData) ? healthData.length : 'Not array');
+  console.log('Raw health data for VO2 Max (first 2000 chars):', JSON.stringify(healthData, null, 2).substring(0, 2000));
   
   if (!Array.isArray(healthData)) {
     console.warn('Health data is not an array:', typeof healthData);
@@ -237,24 +240,60 @@ export function processVo2MaxData(healthData: any, userId: string) {
 
   const vo2MaxRecords = [];
   
-  for (const dayData of healthData) {
-    // Look for VO2 Max in different possible field names from Garmin API
-    const vo2MaxValue = dayData.vo2Max || dayData.vo2MaxValue || dayData.maxOxygenUptake || 
-                       dayData.fitnessAge?.vo2Max || dayData.wellness?.vo2Max || null;
+  for (let index = 0; index < healthData.length; index++) {
+    const dayData = healthData[index];
+    console.log(`\n=== CHECKING HEALTH RECORD ${index + 1}/${healthData.length} FOR VO2 MAX ===`);
+    console.log('Health record keys:', Object.keys(dayData || {}));
+    console.log('Full health record:', JSON.stringify(dayData, null, 2));
     
-    if (vo2MaxValue && vo2MaxValue > 0) {
+    // Look for VO2 Max in different possible field names from Garmin Daily Health API
+    const vo2MaxValue = dayData.vo2Max || dayData.vo2MaxValue || dayData.maxOxygenUptake || 
+                       dayData.fitnessAge?.vo2Max || dayData.wellness?.vo2Max || 
+                       dayData.fitnessData?.vo2Max || dayData.userMetrics?.vo2Max ||
+                       dayData.cardioScore || dayData.fitnessAge || null;
+    
+    // Check nested structures that might contain VO2 Max
+    let nestedVo2Max = null;
+    if (dayData.userMetrics && typeof dayData.userMetrics === 'object') {
+      nestedVo2Max = dayData.userMetrics.vo2Max || dayData.userMetrics.vo2MaxValue || null;
+    }
+    if (dayData.wellness && typeof dayData.wellness === 'object') {
+      nestedVo2Max = nestedVo2Max || dayData.wellness.vo2Max || dayData.wellness.vo2MaxValue || null;
+    }
+    if (dayData.fitnessData && typeof dayData.fitnessData === 'object') {
+      nestedVo2Max = nestedVo2Max || dayData.fitnessData.vo2Max || dayData.fitnessData.vo2MaxValue || null;
+    }
+    
+    const finalVo2MaxValue = vo2MaxValue || nestedVo2Max;
+    
+    console.log('VO2 Max extraction results:', {
+      vo2Max: dayData.vo2Max,
+      vo2MaxValue: dayData.vo2MaxValue,
+      maxOxygenUptake: dayData.maxOxygenUptake,
+      fitnessAge_vo2Max: dayData.fitnessAge?.vo2Max,
+      wellness_vo2Max: dayData.wellness?.vo2Max,
+      userMetrics_vo2Max: dayData.userMetrics?.vo2Max,
+      nestedVo2Max,
+      finalVo2MaxValue
+    });
+    
+    if (finalVo2MaxValue && finalVo2MaxValue > 0 && finalVo2MaxValue < 100) { // Reasonable VO2 Max range
       const vo2MaxRecord = {
         user_id: userId,
-        vo2_max_value: parseFloat(vo2MaxValue.toString()),
+        vo2_max_value: parseFloat(finalVo2MaxValue.toString()),
         measurement_date: dayData.summaryDate || dayData.calendarDate || new Date().toISOString().split('T')[0]
       };
       
-      console.log('Found VO2 Max data:', vo2MaxRecord);
+      console.log('✅ Found VO2 Max data in health record:', vo2MaxRecord);
       vo2MaxRecords.push(vo2MaxRecord);
+    } else {
+      console.log('❌ No valid VO2 Max data in this health record');
     }
+    
+    console.log(`=== HEALTH RECORD ${index + 1} VO2 MAX CHECK COMPLETE ===\n`);
   }
   
-  console.log(`Processed ${vo2MaxRecords.length} VO2 Max records`);
+  console.log(`=== VO2 MAX FALLBACK PROCESSING COMPLETE: ${vo2MaxRecords.length} records ===`);
   return vo2MaxRecords;
 }
 

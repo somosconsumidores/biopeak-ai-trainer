@@ -157,9 +157,27 @@ serve(async (req) => {
     }
 
     // Check user permissions first
-    console.log('Checking Garmin API permissions...');
-    const { permissions } = await checkGarminPermissions(accessToken, tokenSecret, clientId, clientSecret);
-    console.log('Permissions result:', permissions);
+    console.log('🔐 Checking Garmin API permissions...');
+    const { permissions, error: permissionsError } = await checkGarminPermissions(accessToken, tokenSecret, clientId, clientSecret);
+    
+    if (permissionsError) {
+      console.warn('⚠️ Could not verify permissions:', permissionsError);
+      console.log('Available permission scopes may be limited');
+    } else {
+      console.log('✅ Garmin permissions verified:', JSON.stringify(permissions, null, 2));
+      
+      // Check specifically for User Metrics permission
+      const hasUserMetricsPermission = permissions && (
+        permissions.includes?.('USER_METRICS') || 
+        permissions.userMetrics === true ||
+        permissions.includes?.('WELLNESS') ||
+        permissions.wellness === true
+      );
+      
+      if (!hasUserMetricsPermission) {
+        console.warn('⚠️ User Metrics permission may not be available - VO2 Max sync might use fallback');
+      }
+    }
     
     // Try to fetch data from both APIs
     console.log('Attempting to fetch data from both Garmin APIs...');
@@ -272,12 +290,29 @@ serve(async (req) => {
         syncStatus = 'usermetrics_api_success';
       }
     } else {
-      console.log('User Metrics API failed or returned no data:', {
+      console.log('❌ User Metrics API failed or returned no data:', {
         hasData: !!userMetricsData,
         isArray: Array.isArray(userMetricsData),
         length: userMetricsData?.length,
         error: userMetricsError
       });
+      
+      // FALLBACK: Try to extract VO2 Max from Daily Health API if available
+      console.log('🔄 Implementing VO2 Max fallback strategy...');
+      if (healthData && Array.isArray(healthData) && healthData.length > 0) {
+        console.log('🔄 Attempting VO2 Max extraction from Daily Health API as fallback...');
+        const fallbackVo2MaxData = processVo2MaxData(healthData, user.id);
+        
+        if (fallbackVo2MaxData && fallbackVo2MaxData.length > 0) {
+          console.log(`✅ Found ${fallbackVo2MaxData.length} VO2 Max records from Daily Health API fallback`);
+          processedVo2MaxData = fallbackVo2MaxData;
+          console.log('Sample fallback VO2 Max data:', JSON.stringify(processedVo2MaxData[0], null, 2));
+        } else {
+          console.log('❌ No VO2 Max data found in Daily Health API fallback');
+        }
+      } else {
+        console.log('❌ No health data available for VO2 Max fallback');
+      }
       
       // Fallback: try to extract VO2 Max from health data if user metrics failed
       if (healthData && Array.isArray(healthData) && healthData.length > 0) {

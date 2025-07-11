@@ -50,9 +50,11 @@ export function getGarminApiEndpoints() {
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago (API limit)
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // Extended period for VO2 Max
   
   // Recent activities (last 24h with uploadStartTimeInSeconds - respects API 24h limit)
   const uploadStartTime24h = Math.floor(yesterday.getTime() / 1000);
+  const uploadStartTime90d = Math.floor(ninetyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
   return {
@@ -70,18 +72,24 @@ export function getGarminApiEndpoints() {
     dailyHealth: [
       // Recent health data (last 24h)
       `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      // Historical health data using date range (90 days for VO2 Max fallback)
+      `${baseUrl}/wellness-api/rest/dailies?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Historical health data using date range (30 days)
       `${baseUrl}/wellness-api/rest/dailies?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/dailies`
     ],
     
-    // User Metrics API endpoints (for VO2 Max data)
+    // User Metrics API endpoints (for VO2 Max data) - EXPANDED PERIOD
     userMetrics: [
-      // Recent user metrics (last 24h)
-      `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      // Extended historical user metrics using date range (90 days for better VO2 Max coverage)
+      `${baseUrl}/wellness-api/rest/userMetrics?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Extended user metrics with upload timestamps (90 days)
+      `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Historical user metrics using date range (30 days)
       `${baseUrl}/wellness-api/rest/userMetrics?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Recent user metrics (last 24h)
+      `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/userMetrics`
     ],
