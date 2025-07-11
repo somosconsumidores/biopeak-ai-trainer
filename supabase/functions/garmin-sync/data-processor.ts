@@ -37,22 +37,34 @@ export function processGarminActivities(activitiesData: any, userId: string) {
     // Extract timestamps - Garmin uses various formats
     const startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || new Date().toISOString();
     
-    // Extract activity metrics with Garmin-specific field names
-    const distance = activity.distance || activity.distanceInMeters || null;
-    const movingTime = activity.movingDuration || activity.elapsedDuration || activity.duration || null;
-    const elapsedTime = activity.elapsedDuration || activity.duration || null;
-    const elevationGain = activity.elevationGain || activity.elevationCorrected || null;
+    // Extract activity metrics with Garmin-specific field names (checking both possible formats)
+    const distance = activity.distance || activity.distanceInMeters || activity.distanceInKilometers || null;
     
-    // Speed metrics (Garmin uses m/s typically)
-    const avgSpeed = activity.averageSpeed || activity.avgSpeed || null;
-    const maxSpeed = activity.maxSpeed || activity.maximumSpeed || null;
+    // Duration fields - Garmin often provides these in seconds
+    const movingTime = activity.movingDuration || activity.elapsedDuration || activity.duration || 
+                      activity.movingTimeInSeconds || activity.elapsedTimeInSeconds || null;
+    const elapsedTime = activity.elapsedDuration || activity.duration || activity.elapsedTimeInSeconds || 
+                       activity.totalTimeInSeconds || null;
     
-    // Heart rate metrics
-    const avgHR = activity.averageHR || activity.avgHeartRate || activity.averageHeartRate || null;
-    const maxHR = activity.maxHR || activity.maxHeartRate || activity.maximumHeartRate || null;
+    // Elevation in meters
+    const elevationGain = activity.elevationGain || activity.elevationCorrected || activity.totalElevationGain || 
+                         activity.elevationGainInMeters || null;
     
-    // Calories
-    const calories = activity.calories || activity.activeKilocalories || null;
+    // Speed metrics (Garmin typically uses m/s, but sometimes km/h)
+    const avgSpeed = activity.averageSpeed || activity.avgSpeed || activity.averageSpeedInMetersPerSecond ||
+                    activity.averageSpeedInKmPerHour || null;
+    const maxSpeed = activity.maxSpeed || activity.maximumSpeed || activity.maxSpeedInMetersPerSecond ||
+                    activity.maxSpeedInKmPerHour || null;
+    
+    // Heart rate metrics (in BPM)
+    const avgHR = activity.averageHR || activity.avgHeartRate || activity.averageHeartRate || 
+                 activity.averageHeartRateInBeatsPerMinute || activity.avgHr || null;
+    const maxHR = activity.maxHR || activity.maxHeartRate || activity.maximumHeartRate || 
+                 activity.maxHeartRateInBeatsPerMinute || activity.maxHr || null;
+    
+    // Calories (active calories or total calories)
+    const calories = activity.calories || activity.activeKilocalories || activity.totalKilocalories || 
+                    activity.caloriesBurned || activity.energyExpended || null;
     
     console.log('Mapped Garmin fields:', {
       original_activityId: activity.activityId,
