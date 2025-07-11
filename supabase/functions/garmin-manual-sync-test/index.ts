@@ -161,15 +161,35 @@ async function insertGarminVo2Max(supabase: any, vo2MaxData: any[]) {
 }
 
 serve(async (req) => {
+  console.log('🚀 Garmin Manual Sync Test function called');
+  
   if (req.method === 'OPTIONS') {
+    console.log('📞 CORS preflight request');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const clientId = Deno.env.get('GARMIN_CLIENT_ID')!;
-    const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET')!;
+    console.log('🔑 Getting environment variables...');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const clientId = Deno.env.get('GARMIN_CLIENT_ID');
+    const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET');
+
+    if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
+      console.error('❌ Missing environment variables');
+      return new Response(JSON.stringify({ 
+        error: 'Missing required environment variables',
+        missing: {
+          supabaseUrl: !supabaseUrl,
+          supabaseKey: !supabaseKey,
+          clientId: !clientId,
+          clientSecret: !clientSecret
+        }
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     console.log('=== Garmin VO2 Max Sync Test ===');
     
