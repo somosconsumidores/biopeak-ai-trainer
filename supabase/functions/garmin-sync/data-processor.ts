@@ -50,9 +50,25 @@ export function processGarminActivities(activitiesData: any, userId: string) {
     }
     
     // Extract timestamps - Garmin uses various formats and field names
+    // DO NOT fallback to current date - we want the actual activity date
     const startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || 
                      activity.startTime || activity.activityStartTime || activity.startDateTime ||
-                     activity.dateTime || activity.activityDate || new Date().toISOString();
+                     activity.dateTime || activity.activityDate || activity.summaryDateTime ||
+                     activity.calendarDate || null;
+    
+    console.log('Activity date extraction:', {
+      original_startTimeGMT: activity.startTimeGMT,
+      original_startTimeLocal: activity.startTimeLocal,
+      original_beginTimestamp: activity.beginTimestamp,
+      original_startTime: activity.startTime,
+      original_activityStartTime: activity.activityStartTime,
+      original_startDateTime: activity.startDateTime,
+      original_dateTime: activity.dateTime,
+      original_activityDate: activity.activityDate,
+      original_summaryDateTime: activity.summaryDateTime,
+      original_calendarDate: activity.calendarDate,
+      mapped_startDate: startDate
+    });
     
     // Extract activity metrics with Garmin-specific field names (checking both possible formats)
     const distance = activity.distance || activity.distanceInMeters || activity.distanceInKilometers || null;
