@@ -49,12 +49,20 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       }
     }
     
-    // Extract timestamps - Handle Unix timestamp format from startTimeInSeconds
+    // Extract timestamps - Convert Garmin Unix timestamp to local time
     let startDate = null;
     if (activity.startTimeInSeconds) {
-      // Convert Unix timestamp (seconds since epoch) to ISO string
-      startDate = new Date(activity.startTimeInSeconds * 1000).toISOString();
-      console.log(`Converted Unix timestamp ${activity.startTimeInSeconds} to ISO date: ${startDate}`);
+      const startUTC = new Date(activity.startTimeInSeconds * 1000);
+      const offsetMs = (activity.startTimeOffsetInSeconds || 0) * 1000;
+      const localTime = new Date(startUTC.getTime() + offsetMs);
+      startDate = localTime.toISOString();
+      
+      console.log(`Activity date conversion:`, {
+        startTimeInSeconds: activity.startTimeInSeconds,
+        startTimeOffsetInSeconds: activity.startTimeOffsetInSeconds,
+        utcTime: startUTC.toISOString(),
+        localTime: localTime.toISOString()
+      });
     } else if (activity.startTimeGMT) {
       startDate = activity.startTimeGMT;
     } else if (activity.startTimeLocal) {
@@ -62,15 +70,6 @@ export function processGarminActivities(activitiesData: any, userId: string) {
     } else if (activity.beginTimestamp) {
       startDate = activity.beginTimestamp;
     }
-    
-    // Log the date extraction process
-    console.log('Date extraction details:', {
-      startTimeInSeconds: activity.startTimeInSeconds,
-      startTimeGMT: activity.startTimeGMT,
-      startTimeLocal: activity.startTimeLocal,
-      beginTimestamp: activity.beginTimestamp,
-      finalStartDate: startDate
-    });
     
     // Extract activity metrics with Garmin-specific field names (checking both possible formats)
     const distance = activity.distance || activity.distanceInMeters || activity.distanceInKilometers || null;
