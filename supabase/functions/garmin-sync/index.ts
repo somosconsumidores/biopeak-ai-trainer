@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
-import { fetchGarminActivities, fetchGarminDailyHealth, checkGarminPermissions } from './garmin-api.ts';
-import { processGarminActivities, processDailyHealthData, processVo2MaxData, createFallbackActivities, createFallbackDailyHealth } from './data-processor.ts';
+import { fetchGarminActivities, fetchGarminDailyHealth, fetchGarminUserMetrics, checkGarminPermissions } from './garmin-api.ts';
+import { processGarminActivities, processDailyHealthData, processVo2MaxData, processUserMetricsData, createFallbackActivities, createFallbackDailyHealth } from './data-processor.ts';
 import { insertGarminActivities, insertGarminDailyHealth, insertGarminVo2Max, verifyInsertedData } from './database-operations.ts';
 
 const corsHeaders = {
@@ -185,6 +185,17 @@ serve(async (req) => {
       dataLength: healthData?.length || 0,
       error: healthError
     });
+    
+    // Fetch user metrics data from User Metrics API (for VO2 Max)
+    console.log('=== FETCHING USER METRICS (VO2 MAX) ===');
+    const { data: userMetricsData, lastError: userMetricsError } = await fetchGarminUserMetrics(
+      accessToken, tokenSecret, clientId, clientSecret
+    );
+    console.log('User Metrics API result:', {
+      hasData: !!userMetricsData,
+      dataLength: userMetricsData?.length || 0,
+      error: userMetricsError
+    });
 
     let processedActivities = [];
     let processedHealthData = [];
@@ -218,13 +229,7 @@ serve(async (req) => {
     if (healthData && Array.isArray(healthData) && healthData.length > 0) {
       console.log(`Processing ${healthData.length} daily health records from Daily Health Stats API`);
       console.log('Sample health data:', JSON.stringify(healthData[0], null, 2));
-      processedHealthData = processDailyHealthData(healthData, user.id);
-      
-      // Process VO2 Max data from the same health data
-      console.log('=== PROCESSING VO2 MAX DATA ===');
-      processedVo2MaxData = processVo2MaxData(healthData, user.id);
-      console.log(`Found ${processedVo2MaxData.length} VO2 Max records`);
-      
+      processedHealthData = processDailyHealthData(healthData, user.id);      
       console.log(`Processed ${processedHealthData.length} health records successfully`);
       if (syncStatus === 'activity_api_success') {
         syncStatus = 'both_apis_success';
@@ -244,8 +249,48 @@ serve(async (req) => {
       }
     }
     
-    // If both APIs failed, check for existing data or create fallback
-    if (processedActivities.length === 0 && processedHealthData.length === 0) {
+    // Process user metrics data (primary source for VO2 Max)
+    console.log('=== PROCESSING USER METRICS DATA (VO2 MAX) ===');
+    if (userMetricsData && Array.isArray(userMetricsData) && userMetricsData.length > 0) {
+      console.log(`Processing ${userMetricsData.length} user metrics records from User Metrics API`);
+      console.log('Sample user metrics data:', JSON.stringify(userMetricsData[0], null, 2));
+      processedVo2MaxData = processUserMetricsData(userMetricsData, user.id);
+      console.log(`Found ${processedVo2MaxData.length} VO2 Max records from User Metrics API`);
+      
+      // Update sync status to reflect user metrics success
+      if (syncStatus === 'both_apis_success') {
+        syncStatus = 'all_apis_success';
+      } else if (syncStatus === 'activity_api_success') {
+        syncStatus = 'activity_usermetrics_success';
+      } else if (syncStatus === 'health_api_success') {
+        syncStatus = 'health_usermetrics_success';
+      } else {
+        syncStatus = 'usermetrics_api_success';
+      }
+    } else {
+      console.log('User Metrics API failed or returned no data:', {
+        hasData: !!userMetricsData,
+        isArray: Array.isArray(userMetricsData),
+        length: userMetricsData?.length,
+        error: userMetricsError
+      });
+      
+      // Fallback: try to extract VO2 Max from health data if user metrics failed
+      if (healthData && Array.isArray(healthData) && healthData.length > 0) {
+        console.log('=== FALLBACK: PROCESSING VO2 MAX FROM HEALTH DATA ===');
+        const fallbackVo2MaxData = processVo2MaxData(healthData, user.id);
+        console.log(`Fallback found ${fallbackVo2MaxData.length} VO2 Max records from health data`);
+        processedVo2MaxData = fallbackVo2MaxData;
+      }
+      
+      if (userMetricsError) {
+        lastError = lastError || userMetricsError;
+        console.log('User Metrics API error details:', userMetricsError);
+      }
+    }
+    
+    // If all APIs failed, check for existing data or create fallback
+    if (processedActivities.length === 0 && processedHealthData.length === 0 && processedVo2MaxData.length === 0) {
       console.log('=== BOTH APIS FAILED - FALLBACK LOGIC ===');
       console.log('Both APIs failed, checking for existing data...');
       syncStatus = 'apis_failed';
@@ -353,14 +398,22 @@ serve(async (req) => {
 
 function getSyncMessage(status: string, activityCount: number, healthCount: number = 0): string {
   switch (status) {
+    case 'all_apis_success':
+      return `Successfully synced ${activityCount} activities, ${healthCount} daily health records, and VO2 Max data from all Garmin APIs`;
     case 'both_apis_success':
       return `Successfully synced ${activityCount} activities and ${healthCount} daily health records from both Garmin APIs`;
+    case 'activity_usermetrics_success':
+      return `Successfully synced ${activityCount} activities and VO2 Max data from Garmin APIs`;
+    case 'health_usermetrics_success':
+      return `Successfully synced ${healthCount} daily health records and VO2 Max data from Garmin APIs`;
+    case 'usermetrics_api_success':
+      return `Successfully synced VO2 Max data from Garmin User Metrics API`;
     case 'activity_api_success':
       return `Successfully synced ${activityCount} activities from Garmin Activity API`;
     case 'health_api_success':
       return `Successfully synced ${healthCount} daily health records from Garmin Daily Health Stats API`;
     case 'apis_failed':
-      return 'Both Garmin APIs failed, but webhook system may be handling real-time data';
+      return 'All Garmin APIs failed, but webhook system may be handling real-time data';
     case 'webhook_data_available':
       return 'Using existing webhook data. Manual sync not needed as webhooks are working';
     case 'demo_fallback':
@@ -372,14 +425,22 @@ function getSyncMessage(status: string, activityCount: number, healthCount: numb
 
 function getRecommendation(status: string): string {
   switch (status) {
+    case 'all_apis_success':
+      return 'All APIs working perfectly! Activity, health, and VO2 Max data will continue via webhooks.';
     case 'both_apis_success':
-      return 'Both APIs working perfectly! Data will continue via webhooks.';
+      return 'Activity and health APIs working perfectly! Data will continue via webhooks.';
+    case 'activity_usermetrics_success':
+      return 'Activity and VO2 Max APIs working. Check Daily Health Stats API permissions if health data is needed.';
+    case 'health_usermetrics_success':
+      return 'Health and VO2 Max APIs working. Check Activity API permissions if activity data is needed.';
+    case 'usermetrics_api_success':
+      return 'VO2 Max API working perfectly! Check other API permissions if activity/health data is needed.';
     case 'activity_api_success':
-      return 'Activity API working. Check Daily Health Stats API permissions if health data is needed.';
+      return 'Activity API working. Check Daily Health Stats and User Metrics API permissions if health/VO2 Max data is needed.';
     case 'health_api_success':
-      return 'Daily Health Stats API working. Check Activity API permissions if activity data is needed.';
+      return 'Daily Health Stats API working. Check Activity and User Metrics API permissions if activity/VO2 Max data is needed.';
     case 'apis_failed':
-      return 'Check Garmin API credentials and permissions for both Activity and Daily Health Stats APIs.';
+      return 'Check Garmin API credentials and permissions for Activity, Daily Health Stats, and User Metrics APIs.';
     case 'webhook_data_available':
       return 'Webhook system working correctly. New data will appear automatically.';
     case 'demo_fallback':

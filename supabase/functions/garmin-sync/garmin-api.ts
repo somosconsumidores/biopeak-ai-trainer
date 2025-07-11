@@ -76,6 +76,16 @@ export function getGarminApiEndpoints() {
       `${baseUrl}/wellness-api/rest/dailies`
     ],
     
+    // User Metrics API endpoints (for VO2 Max data)
+    userMetrics: [
+      // Recent user metrics (last 24h)
+      `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      // Historical user metrics using date range (30 days)
+      `${baseUrl}/wellness-api/rest/userMetrics?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Fallback without parameters
+      `${baseUrl}/wellness-api/rest/userMetrics`
+    ],
+    
     // User permissions endpoint (to verify access)
     permissions: `${baseUrl}/wellness-api/rest/user/permissions`
   };
@@ -91,6 +101,12 @@ export async function fetchGarminActivities(accessToken: string, tokenSecret: st
 export async function fetchGarminDailyHealth(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
   const { dailyHealth: healthEndpoints } = getGarminApiEndpoints();
   return await testApiEndpoints('DAILY HEALTH', healthEndpoints, accessToken, tokenSecret, clientId, clientSecret);
+}
+
+// Fetch user metrics from User Metrics API (includes VO2 Max data)
+export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
+  const { userMetrics: userMetricsEndpoints } = getGarminApiEndpoints();
+  return await testApiEndpoints('USER METRICS', userMetricsEndpoints, accessToken, tokenSecret, clientId, clientSecret);
 }
 
 // Check user permissions

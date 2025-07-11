@@ -225,7 +225,7 @@ export function processDailyHealthData(healthData: any, userId: string) {
   });
 }
 
-// Process VO2 Max data from Daily Health Stats API response
+// Process VO2 Max data from Daily Health Stats API response (deprecated - use processUserMetricsData)
 export function processVo2MaxData(healthData: any, userId: string) {
   console.log('Processing VO2 Max data for user:', userId);
   console.log('Raw health data for VO2 Max:', JSON.stringify(healthData, null, 2));
@@ -255,6 +255,76 @@ export function processVo2MaxData(healthData: any, userId: string) {
   }
   
   console.log(`Processed ${vo2MaxRecords.length} VO2 Max records`);
+  return vo2MaxRecords;
+}
+
+// Process User Metrics API response data (primary source for VO2 Max)
+export function processUserMetricsData(userMetricsData: any, userId: string) {
+  console.log('=== GARMIN USER METRICS PROCESSING START ===');
+  console.log('Processing Garmin user metrics for user:', userId);
+  console.log('Raw user metrics data type:', typeof userMetricsData);
+  console.log('Raw user metrics data length:', Array.isArray(userMetricsData) ? userMetricsData.length : 'Not array');
+  console.log('Raw user metrics data structure:', JSON.stringify(userMetricsData, null, 2));
+  
+  if (!Array.isArray(userMetricsData)) {
+    console.warn('User metrics data is not an array:', typeof userMetricsData);
+    console.log('Attempting to extract array from object structure...');
+    
+    // Try to find user metrics in common object structures
+    if (userMetricsData && typeof userMetricsData === 'object') {
+      const possibleArrays = userMetricsData.userMetrics || userMetricsData.data || userMetricsData.results || userMetricsData.items;
+      if (Array.isArray(possibleArrays)) {
+        console.log('Found user metrics array in object structure, length:', possibleArrays.length);
+        userMetricsData = possibleArrays;
+      } else {
+        console.log('Converting single object to array');
+        userMetricsData = [userMetricsData];
+      }
+    } else {
+      return [];
+    }
+  }
+
+  const vo2MaxRecords = [];
+  
+  for (let index = 0; index < userMetricsData.length; index++) {
+    const metricsData = userMetricsData[index];
+    console.log(`\n=== PROCESSING USER METRICS ${index + 1}/${userMetricsData.length} ===`);
+    console.log('Raw metrics keys:', Object.keys(metricsData || {}));
+    console.log('Full metrics object:', JSON.stringify(metricsData, null, 2));
+    
+    // Extract VO2 Max value from User Metrics API response
+    const vo2MaxValue = metricsData.vo2Max || metricsData.vo2MaxValue || null;
+    const vo2MaxCycling = metricsData.vo2MaxCycling || null;
+    const fitnessAge = metricsData.fitnessAge || null;
+    const measurementDate = metricsData.calendarDate || metricsData.summaryDate || new Date().toISOString().split('T')[0];
+    
+    console.log('Extracted values:', {
+      vo2MaxValue,
+      vo2MaxCycling,
+      fitnessAge,
+      measurementDate
+    });
+    
+    // Process VO2 Max (running/general)
+    if (vo2MaxValue && vo2MaxValue > 0) {
+      const vo2MaxRecord = {
+        user_id: userId,
+        vo2_max_value: parseFloat(vo2MaxValue.toString()),
+        measurement_date: measurementDate
+      };
+      
+      console.log('Found VO2 Max data:', vo2MaxRecord);
+      vo2MaxRecords.push(vo2MaxRecord);
+    }
+    
+    // Could also process cycling VO2 Max if we want to store it separately
+    // For now, we'll focus on the main VO2 Max value
+    
+    console.log(`=== USER METRICS ${index + 1} PROCESSING COMPLETE ===\n`);
+  }
+  
+  console.log(`=== USER METRICS PROCESSING COMPLETE: ${vo2MaxRecords.length} VO2 Max records ===`);
   return vo2MaxRecords;
 }
 
