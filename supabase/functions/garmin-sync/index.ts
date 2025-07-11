@@ -194,7 +194,8 @@ serve(async (req) => {
     console.log('User Metrics API result:', {
       hasData: !!userMetricsData,
       dataLength: userMetricsData?.length || 0,
-      error: userMetricsError
+      error: userMetricsError,
+      sampleData: userMetricsData?.[0] ? JSON.stringify(userMetricsData[0], null, 2) : 'No data'
     });
 
     let processedActivities = [];
@@ -256,6 +257,9 @@ serve(async (req) => {
       console.log('Sample user metrics data:', JSON.stringify(userMetricsData[0], null, 2));
       processedVo2MaxData = processUserMetricsData(userMetricsData, user.id);
       console.log(`Found ${processedVo2MaxData.length} VO2 Max records from User Metrics API`);
+      if (processedVo2MaxData.length > 0) {
+        console.log('Sample processed VO2 Max data:', JSON.stringify(processedVo2MaxData[0], null, 2));
+      }
       
       // Update sync status to reflect user metrics success
       if (syncStatus === 'both_apis_success') {
@@ -341,9 +345,13 @@ serve(async (req) => {
     }
     
     if (processedVo2MaxData.length > 0) {
-      console.log(`Inserting ${processedVo2MaxData.length} VO2 Max records into database...`);
-      await insertGarminVo2Max(supabase, processedVo2MaxData);
+      console.log(`🏃‍♂️ Inserting ${processedVo2MaxData.length} VO2 Max records into database...`);
+      console.log('VO2 Max records to insert:', JSON.stringify(processedVo2MaxData, null, 2));
+      const insertResult = await insertGarminVo2Max(supabase, processedVo2MaxData);
       insertedVo2MaxRecords = processedVo2MaxData.length;
+      console.log(`✅ Successfully inserted ${insertedVo2MaxRecords} VO2 Max records`);
+    } else {
+      console.log('❌ No VO2 Max data to insert');
     }
     
     // Verify insertion
