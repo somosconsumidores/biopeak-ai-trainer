@@ -3,7 +3,9 @@
 // Process Activity API response data
 export function processGarminActivities(activitiesData: any, userId: string) {
   console.log('Processing Garmin activities for user:', userId);
-  console.log('Raw activities data:', JSON.stringify(activitiesData, null, 2));
+  console.log('Raw activities data type:', typeof activitiesData);
+  console.log('Raw activities data length:', Array.isArray(activitiesData) ? activitiesData.length : 'Not array');
+  console.log('Raw activities data structure:', JSON.stringify(activitiesData, null, 2));
   
   if (!Array.isArray(activitiesData)) {
     console.warn('Activities data is not an array:', typeof activitiesData);
@@ -12,40 +14,67 @@ export function processGarminActivities(activitiesData: any, userId: string) {
 
   return activitiesData.map((activity: any, index: number) => {
     console.log(`\n=== PROCESSING ACTIVITY ${index + 1}/${activitiesData.length} ===`);
-    console.log('Raw activity data:', JSON.stringify(activity, null, 2));
-    console.log('Available keys:', Object.keys(activity));
+    console.log('Raw activity keys:', Object.keys(activity || {}));
+    console.log('Full activity object:', JSON.stringify(activity, null, 2));
     
-    // Check for different possible data structures
-    const activityId = activity.activityId || activity.id || activity.activityUUID || Math.floor(Math.random() * 1000000);
-    const activityName = activity.activityName || activity.name || activity.summary?.activityName || 'Untitled Activity';
-    const activityType = activity.activityType?.typeKey || activity.type || activity.summary?.activityType || 'Unknown';
-    const startDate = activity.startTimeLocal || activity.startTime || activity.summary?.startTimeLocal || new Date().toISOString();
+    // Look for different possible structures in the Garmin API response
+    // Based on official Garmin wellness API documentation
+    const activityId = activity.activityId || activity.summaryId || activity.id || Math.floor(Math.random() * 1000000);
+    const activityName = activity.activityName || activity.name || activity.activityType?.parent?.parentName || 'Untitled Activity';
     
-    // Enhanced data extraction with multiple fallbacks
-    const distance = activity.distance || activity.summary?.distance || activity.activitySummary?.distance || null;
-    const movingTime = activity.movingDuration || activity.duration || activity.summary?.movingDuration || activity.activitySummary?.movingDuration || null;
-    const elapsedTime = activity.elapsedDuration || activity.duration || activity.summary?.elapsedDuration || activity.activitySummary?.elapsedDuration || null;
-    const elevationGain = activity.elevationGain || activity.summary?.elevationGain || activity.activitySummary?.elevationGain || null;
-    const avgSpeed = activity.averageSpeed || activity.summary?.averageSpeed || activity.activitySummary?.averageSpeed || null;
-    const maxSpeed = activity.maxSpeed || activity.summary?.maxSpeed || activity.activitySummary?.maxSpeed || null;
-    const avgHR = activity.averageHR || activity.avgHeartRate || activity.summary?.averageHR || activity.activitySummary?.averageHR || null;
-    const maxHR = activity.maxHR || activity.maxHeartRate || activity.summary?.maxHR || activity.activitySummary?.maxHR || null;
-    const calories = activity.calories || activity.summary?.calories || activity.activitySummary?.calories || null;
+    // Handle nested activityType structure from Garmin
+    let activityType = 'Unknown';
+    if (activity.activityType) {
+      if (typeof activity.activityType === 'string') {
+        activityType = activity.activityType;
+      } else if (activity.activityType.typeKey) {
+        activityType = activity.activityType.typeKey;
+      } else if (activity.activityType.parent?.parentName) {
+        activityType = activity.activityType.parent.parentName;
+      }
+    }
     
-    console.log('Extracted values:', {
-      activityId,
-      activityName,
-      activityType,
-      startDate,
-      distance,
-      movingTime,
-      elapsedTime,
-      elevationGain,
-      avgSpeed,
-      maxSpeed,
-      avgHR,
-      maxHR,
-      calories
+    // Extract timestamps - Garmin uses various formats
+    const startDate = activity.startTimeGMT || activity.startTimeLocal || activity.beginTimestamp || new Date().toISOString();
+    
+    // Extract activity metrics with Garmin-specific field names
+    const distance = activity.distance || activity.distanceInMeters || null;
+    const movingTime = activity.movingDuration || activity.elapsedDuration || activity.duration || null;
+    const elapsedTime = activity.elapsedDuration || activity.duration || null;
+    const elevationGain = activity.elevationGain || activity.elevationCorrected || null;
+    
+    // Speed metrics (Garmin uses m/s typically)
+    const avgSpeed = activity.averageSpeed || activity.avgSpeed || null;
+    const maxSpeed = activity.maxSpeed || activity.maximumSpeed || null;
+    
+    // Heart rate metrics
+    const avgHR = activity.averageHR || activity.avgHeartRate || activity.averageHeartRate || null;
+    const maxHR = activity.maxHR || activity.maxHeartRate || activity.maximumHeartRate || null;
+    
+    // Calories
+    const calories = activity.calories || activity.activeKilocalories || null;
+    
+    console.log('Mapped Garmin fields:', {
+      original_activityId: activity.activityId,
+      original_summaryId: activity.summaryId,
+      mapped_activityId: activityId,
+      original_activityName: activity.activityName,
+      mapped_activityName: activityName,
+      original_activityType: activity.activityType,
+      mapped_activityType: activityType,
+      original_startTimeGMT: activity.startTimeGMT,
+      original_startTimeLocal: activity.startTimeLocal,
+      mapped_startDate: startDate,
+      original_distance: activity.distance,
+      original_distanceInMeters: activity.distanceInMeters,
+      mapped_distance: distance,
+      original_movingDuration: activity.movingDuration,
+      original_elapsedDuration: activity.elapsedDuration,
+      mapped_movingTime: movingTime,
+      mapped_elapsedTime: elapsedTime,
+      original_calories: activity.calories,
+      original_activeKilocalories: activity.activeKilocalories,
+      mapped_calories: calories
     });
     
     const processedActivity = {
@@ -54,15 +83,15 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       name: activityName,
       type: activityType,
       start_date: startDate,
-      distance: distance ? parseFloat(distance) : null,
-      moving_time: movingTime,
-      elapsed_time: elapsedTime,
-      total_elevation_gain: elevationGain ? parseFloat(elevationGain) : null,
-      average_speed: avgSpeed ? parseFloat(avgSpeed) : null,
-      max_speed: maxSpeed ? parseFloat(maxSpeed) : null,
-      average_heartrate: avgHR,
-      max_heartrate: maxHR,
-      calories: calories ? parseFloat(calories) : null
+      distance: distance ? parseFloat(distance.toString()) : null,
+      moving_time: movingTime ? parseInt(movingTime.toString()) : null,
+      elapsed_time: elapsedTime ? parseInt(elapsedTime.toString()) : null,
+      total_elevation_gain: elevationGain ? parseFloat(elevationGain.toString()) : null,
+      average_speed: avgSpeed ? parseFloat(avgSpeed.toString()) : null,
+      max_speed: maxSpeed ? parseFloat(maxSpeed.toString()) : null,
+      average_heartrate: avgHR ? parseInt(avgHR.toString()) : null,
+      max_heartrate: maxHR ? parseInt(maxHR.toString()) : null,
+      calories: calories ? parseFloat(calories.toString()) : null
     };
     
     console.log('Final processed activity:', processedActivity);
