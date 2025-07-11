@@ -80,16 +80,16 @@ export function getGarminApiEndpoints() {
       `${baseUrl}/wellness-api/rest/dailies`
     ],
     
-    // User Metrics API endpoints (for VO2 Max data) - EXPANDED PERIOD
+    // User Metrics API endpoints (for VO2 Max data) - MULTIPLE APPROACHES
     userMetrics: [
+      // Use metricType=vo2Max specifically for VO2 Max data
+      `${baseUrl}/wellness-api/rest/userMetrics?metricType=vo2Max&startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Try fitness metrics endpoint
+      `${baseUrl}/wellness-api/rest/fitnessAge?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Extended historical user metrics using date range (90 days for better VO2 Max coverage)
       `${baseUrl}/wellness-api/rest/userMetrics?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Extended user metrics with upload timestamps (90 days)
       `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Historical user metrics using date range (30 days)
-      `${baseUrl}/wellness-api/rest/userMetrics?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-      // Recent user metrics (last 24h)
-      `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/userMetrics`
     ],

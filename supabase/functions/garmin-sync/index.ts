@@ -271,60 +271,71 @@ serve(async (req) => {
     // Process user metrics data (primary source for VO2 Max)
     console.log('=== PROCESSING USER METRICS DATA (VO2 MAX) ===');
     if (userMetricsData && Array.isArray(userMetricsData) && userMetricsData.length > 0) {
-      console.log(`Processing ${userMetricsData.length} user metrics records from User Metrics API`);
-      console.log('Sample user metrics data:', JSON.stringify(userMetricsData[0], null, 2));
-      processedVo2MaxData = processUserMetricsData(userMetricsData, user.id);
-      console.log(`Found ${processedVo2MaxData.length} VO2 Max records from User Metrics API`);
-      if (processedVo2MaxData.length > 0) {
-        console.log('Sample processed VO2 Max data:', JSON.stringify(processedVo2MaxData[0], null, 2));
-      }
+      console.log(`✅ Got User Metrics data: ${userMetricsData.length} records`);
+      console.log('🔍 DEBUGGING: Full User Metrics raw data:', JSON.stringify(userMetricsData, null, 2));
       
-      // Update sync status to reflect user metrics success
-      if (syncStatus === 'both_apis_success') {
-        syncStatus = 'all_apis_success';
-      } else if (syncStatus === 'activity_api_success') {
-        syncStatus = 'activity_usermetrics_success';
-      } else if (syncStatus === 'health_api_success') {
-        syncStatus = 'health_usermetrics_success';
+      // Log each record individually for debugging
+      userMetricsData.forEach((record, index) => {
+        console.log(`📊 User Metrics Record ${index + 1}:`, JSON.stringify(record, null, 2));
+        console.log(`📊 Available keys in record ${index + 1}:`, Object.keys(record || {}));
+        
+        // Check for numeric values that might be VO2 Max
+        const numericValues = Object.entries(record || {})
+          .filter(([key, value]) => typeof value === 'number' && value > 0 && value < 100)
+          .map(([key, value]) => `${key}: ${value}`);
+        console.log(`🔢 Numeric values (0-100) in record ${index + 1}:`, numericValues);
+      });
+      
+      processedVo2MaxData = processUserMetricsData(userMetricsData, user.id);
+      console.log(`🎯 Processed VO2 Max data result:`, {
+        found: processedVo2MaxData.length,
+        data: processedVo2MaxData
+      });
+      
+      if (processedVo2MaxData.length > 0) {
+        console.log('✅ Sample processed VO2 Max data:', JSON.stringify(processedVo2MaxData[0], null, 2));
+        syncStatus = 'usermetrics_vo2max_success';
       } else {
-        syncStatus = 'usermetrics_api_success';
+        console.log('❌ No VO2 Max extracted from User Metrics data');
+        // Log all available fields in the data for debugging
+        const allFields = new Set();
+        userMetricsData.forEach(record => {
+          Object.keys(record || {}).forEach(key => allFields.add(key));
+        });
+        console.log('🔍 All available fields in User Metrics data:', Array.from(allFields));
       }
     } else {
       console.log('❌ User Metrics API failed or returned no data:', {
         hasData: !!userMetricsData,
         isArray: Array.isArray(userMetricsData),
         length: userMetricsData?.length,
-        error: userMetricsError
+        error: userMetricsError,
+        rawData: userMetricsData
       });
-      
-      // FALLBACK: Try to extract VO2 Max from Daily Health API if available
-      console.log('🔄 Implementing VO2 Max fallback strategy...');
-      if (healthData && Array.isArray(healthData) && healthData.length > 0) {
-        console.log('🔄 Attempting VO2 Max extraction from Daily Health API as fallback...');
-        const fallbackVo2MaxData = processVo2MaxData(healthData, user.id);
-        
-        if (fallbackVo2MaxData && fallbackVo2MaxData.length > 0) {
-          console.log(`✅ Found ${fallbackVo2MaxData.length} VO2 Max records from Daily Health API fallback`);
-          processedVo2MaxData = fallbackVo2MaxData;
-          console.log('Sample fallback VO2 Max data:', JSON.stringify(processedVo2MaxData[0], null, 2));
-        } else {
-          console.log('❌ No VO2 Max data found in Daily Health API fallback');
-        }
-      } else {
-        console.log('❌ No health data available for VO2 Max fallback');
-      }
-      
-      // Fallback: try to extract VO2 Max from health data if user metrics failed
-      if (healthData && Array.isArray(healthData) && healthData.length > 0) {
-        console.log('=== FALLBACK: PROCESSING VO2 MAX FROM HEALTH DATA ===');
-        const fallbackVo2MaxData = processVo2MaxData(healthData, user.id);
-        console.log(`Fallback found ${fallbackVo2MaxData.length} VO2 Max records from health data`);
-        processedVo2MaxData = fallbackVo2MaxData;
-      }
       
       if (userMetricsError) {
         lastError = lastError || userMetricsError;
         console.log('User Metrics API error details:', userMetricsError);
+      }
+    }
+    
+    // If no VO2 Max found in User Metrics, try fallback from Daily Health
+    if (processedVo2MaxData.length === 0 && healthData && Array.isArray(healthData) && healthData.length > 0) {
+      console.log('🔄 === FALLBACK: PROCESSING VO2 MAX FROM DAILY HEALTH DATA ===');
+      console.log('🔍 DEBUGGING: Full Daily Health raw data:', JSON.stringify(healthData, null, 2));
+      
+      const fallbackVo2MaxData = processVo2MaxData(healthData, user.id);
+      console.log(`🎯 Fallback VO2 Max result:`, {
+        found: fallbackVo2MaxData.length,
+        data: fallbackVo2MaxData
+      });
+      
+      if (fallbackVo2MaxData && fallbackVo2MaxData.length > 0) {
+        console.log(`✅ Found ${fallbackVo2MaxData.length} VO2 Max records from Daily Health fallback`);
+        processedVo2MaxData = fallbackVo2MaxData;
+        syncStatus = 'health_vo2max_fallback_success';
+      } else {
+        console.log('❌ No VO2 Max found in Daily Health fallback either');
       }
     }
     

@@ -332,11 +332,68 @@ export function processUserMetricsData(userMetricsData: any, userId: string) {
     console.log('Raw metrics keys:', Object.keys(metricsData || {}));
     console.log('Full metrics object:', JSON.stringify(metricsData, null, 2));
     
-    // Extract VO2 Max value from User Metrics API response
-    const vo2MaxValue = metricsData.vo2Max || metricsData.vo2MaxValue || null;
-    const vo2MaxCycling = metricsData.vo2MaxCycling || null;
-    const fitnessAge = metricsData.fitnessAge || null;
-    const measurementDate = metricsData.calendarDate || metricsData.summaryDate || new Date().toISOString().split('T')[0];
+    // Extract VO2 Max value from User Metrics API response with comprehensive search
+    let vo2MaxValue = null;
+    let vo2MaxCycling = null;
+    let fitnessAge = null;
+    
+    // Search for VO2 Max in all possible field names and structures
+    const vo2MaxFields = [
+      'vo2Max', 'vo2MaxValue', 'vo2max', 'VO2Max', 'VO2_MAX',
+      'maxOxygenUptake', 'oxygenUptake', 'aerobicCapacity'
+    ];
+    
+    // Direct field search
+    for (const field of vo2MaxFields) {
+      if (metricsData[field] && typeof metricsData[field] === 'number' && metricsData[field] > 0) {
+        vo2MaxValue = metricsData[field];
+        break;
+      }
+    }
+    
+    // Search in nested objects
+    if (!vo2MaxValue) {
+      const nestedObjects = [
+        metricsData.metrics, metricsData.userMetrics, metricsData.data, 
+        metricsData.measurements, metricsData.fitnessData, metricsData.cardio
+      ];
+      
+      for (const obj of nestedObjects) {
+        if (obj && typeof obj === 'object') {
+          for (const field of vo2MaxFields) {
+            if (obj[field] && typeof obj[field] === 'number' && obj[field] > 0) {
+              vo2MaxValue = obj[field];
+              break;
+            }
+          }
+          if (vo2MaxValue) break;
+        }
+      }
+    }
+    
+    // Search in measurements array if exists
+    if (!vo2MaxValue && Array.isArray(metricsData.measurements)) {
+      for (const measurement of metricsData.measurements) {
+        if (measurement && (
+          measurement.type === 'VO2_MAX' || 
+          measurement.metricType === 'vo2Max' ||
+          measurement.name === 'vo2Max'
+        ) && measurement.value) {
+          vo2MaxValue = measurement.value;
+          break;
+        }
+      }
+    }
+    
+    // Look for cycling VO2 Max
+    vo2MaxCycling = metricsData.vo2MaxCycling || metricsData.vo2MaxBike || null;
+    
+    // Get fitness age if available
+    fitnessAge = metricsData.fitnessAge || null;
+    
+    const measurementDate = metricsData.calendarDate || metricsData.summaryDate || 
+                           metricsData.measurementDate || metricsData.date ||
+                           new Date().toISOString().split('T')[0];
     
     console.log('Extracted values:', {
       vo2MaxValue,
