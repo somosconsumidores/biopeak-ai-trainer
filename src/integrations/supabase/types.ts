@@ -18,59 +18,80 @@ export type Database = {
         Row: {
           average_heartrate: number | null
           average_speed: number | null
+          avg_temperature: number | null
           calories: number | null
           created_at: string
           distance: number | null
           elapsed_time: number | null
+          end_latitude: number | null
+          end_longitude: number | null
           garmin_activity_id: number
           id: string
           max_heartrate: number | null
           max_speed: number | null
+          max_temperature: number | null
           moving_time: number | null
           name: string
           start_date: string
+          start_latitude: number | null
+          start_longitude: number | null
           total_elevation_gain: number | null
           type: string
           updated_at: string
           user_id: string
+          weather_condition: string | null
         }
         Insert: {
           average_heartrate?: number | null
           average_speed?: number | null
+          avg_temperature?: number | null
           calories?: number | null
           created_at?: string
           distance?: number | null
           elapsed_time?: number | null
+          end_latitude?: number | null
+          end_longitude?: number | null
           garmin_activity_id: number
           id?: string
           max_heartrate?: number | null
           max_speed?: number | null
+          max_temperature?: number | null
           moving_time?: number | null
           name: string
           start_date: string
+          start_latitude?: number | null
+          start_longitude?: number | null
           total_elevation_gain?: number | null
           type: string
           updated_at?: string
           user_id: string
+          weather_condition?: string | null
         }
         Update: {
           average_heartrate?: number | null
           average_speed?: number | null
+          avg_temperature?: number | null
           calories?: number | null
           created_at?: string
           distance?: number | null
           elapsed_time?: number | null
+          end_latitude?: number | null
+          end_longitude?: number | null
           garmin_activity_id?: number
           id?: string
           max_heartrate?: number | null
           max_speed?: number | null
+          max_temperature?: number | null
           moving_time?: number | null
           name?: string
           start_date?: string
+          start_latitude?: number | null
+          start_longitude?: number | null
           total_elevation_gain?: number | null
           type?: string
           updated_at?: string
           user_id?: string
+          weather_condition?: string | null
         }
         Relationships: []
       }

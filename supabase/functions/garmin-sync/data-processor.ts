@@ -81,6 +81,24 @@ export function processGarminActivities(activitiesData: any, userId: string) {
     const calories = activity.calories || activity.activeKilocalories || activity.totalKilocalories || 
                     activity.caloriesBurned || activity.energyExpended || null;
     
+    // Environmental data
+    const avgTemp = activity.avgTemperature || activity.averageTemperature || activity.temperature?.avg || 
+                   activity.weather?.temperature?.avg || activity.environmentalData?.avgTemperature || null;
+    const maxTemp = activity.maxTemperature || activity.maximumTemperature || activity.temperature?.max || 
+                   activity.weather?.temperature?.max || activity.environmentalData?.maxTemperature || null;
+    const weatherCondition = activity.weatherCondition || activity.weather?.condition || activity.weather?.description || 
+                            activity.environmentalData?.weatherCondition || null;
+    
+    // Location data
+    const startLat = activity.startLatitude || activity.startLat || activity.location?.start?.latitude || 
+                    activity.gps?.start?.lat || activity.beginLatitude || null;
+    const startLng = activity.startLongitude || activity.startLng || activity.location?.start?.longitude || 
+                    activity.gps?.start?.lng || activity.beginLongitude || null;
+    const endLat = activity.endLatitude || activity.endLat || activity.location?.end?.latitude || 
+                  activity.gps?.end?.lat || activity.endingLatitude || null;
+    const endLng = activity.endLongitude || activity.endLng || activity.location?.end?.longitude || 
+                  activity.gps?.end?.lng || activity.endingLongitude || null;
+    
     console.log('Mapped Garmin fields:', {
       original_activityId: activity.activityId,
       original_summaryId: activity.summaryId,
@@ -101,7 +119,23 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       mapped_elapsedTime: elapsedTime,
       original_calories: activity.calories,
       original_activeKilocalories: activity.activeKilocalories,
-      mapped_calories: calories
+      mapped_calories: calories,
+      // Environmental fields
+      original_avgTemperature: activity.avgTemperature,
+      original_maxTemperature: activity.maxTemperature,
+      original_weatherCondition: activity.weatherCondition,
+      mapped_avgTemp: avgTemp,
+      mapped_maxTemp: maxTemp,
+      mapped_weatherCondition: weatherCondition,
+      // Location fields
+      original_startLatitude: activity.startLatitude,
+      original_startLongitude: activity.startLongitude,
+      original_endLatitude: activity.endLatitude,
+      original_endLongitude: activity.endLongitude,
+      mapped_startLat: startLat,
+      mapped_startLng: startLng,
+      mapped_endLat: endLat,
+      mapped_endLng: endLng
     });
     
     const processedActivity = {
@@ -118,7 +152,14 @@ export function processGarminActivities(activitiesData: any, userId: string) {
       max_speed: maxSpeed ? parseFloat(maxSpeed.toString()) : null,
       average_heartrate: avgHR ? parseInt(avgHR.toString()) : null,
       max_heartrate: maxHR ? parseInt(maxHR.toString()) : null,
-      calories: calories ? parseFloat(calories.toString()) : null
+      calories: calories ? parseFloat(calories.toString()) : null,
+      avg_temperature: avgTemp ? parseFloat(avgTemp.toString()) : null,
+      max_temperature: maxTemp ? parseFloat(maxTemp.toString()) : null,
+      weather_condition: weatherCondition,
+      start_latitude: startLat ? parseFloat(startLat.toString()) : null,
+      start_longitude: startLng ? parseFloat(startLng.toString()) : null,
+      end_latitude: endLat ? parseFloat(endLat.toString()) : null,
+      end_longitude: endLng ? parseFloat(endLng.toString()) : null
     };
     
     console.log('Final processed activity:', processedActivity);
