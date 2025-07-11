@@ -38,3 +38,6 @@ verify_jwt = true
 
 [functions.garmin-backfill]
 verify_jwt = true
+
+[functions.garmin-manual-sync-test]
+verify_jwt = true
