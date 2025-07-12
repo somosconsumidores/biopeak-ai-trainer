@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
 import { fetchGarminActivities, fetchGarminDailyHealth, fetchGarminUserMetrics, checkGarminPermissions } from './garmin-api.ts';
 import { processGarminActivities, processDailyHealthData, processVo2MaxData, processUserMetricsData, createFallbackActivities, createFallbackDailyHealth } from './data-processor.ts';
 import { insertGarminActivities, insertGarminDailyHealth, insertGarminVo2Max, verifyInsertedData, verifyVo2MaxInsertion } from './database-operations.ts';
+import { ensureValidTokens } from './token-refresh.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -68,79 +69,25 @@ serve(async (req) => {
 
     console.log('JWT verified successfully for user:', user.id);
 
-    // Get user's Garmin tokens with detailed validation
-    console.log('Fetching Garmin tokens for user...');
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('garmin_tokens')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+    // Ensure valid tokens (with automatic refresh if needed)
+    console.log('🔄 Ensuring valid Garmin tokens (with automatic refresh)...');
+    const { accessToken, tokenSecret, error: tokenValidationError } = await ensureValidTokens(
+      supabase,
+      user.id,
+      clientId,
+      clientSecret
+    );
 
-    if (tokenError || !tokenData) {
-      console.error('Garmin tokens not found:', tokenError);
-      throw new Error('No Garmin connection found. Please connect your Garmin account first.');
+    if (tokenValidationError || !accessToken || !tokenSecret) {
+      console.error('Failed to get valid tokens:', tokenValidationError);
+      if (tokenValidationError.includes('No refresh token available') || 
+          tokenValidationError.includes('Token refresh failed')) {
+        throw new Error('Tokens do Garmin expiraram e não puderam ser renovados automaticamente. Por favor, reconecte sua conta Garmin.');
+      }
+      throw new Error(`Erro de autenticação do Garmin: ${tokenValidationError || 'Tokens inválidos'}`);
     }
 
-    // Enhanced token validation
-    if (!tokenData.access_token || !tokenData.token_secret) {
-      console.error('Invalid token structure:', {
-        hasAccessToken: !!tokenData.access_token,
-        hasTokenSecret: !!tokenData.token_secret
-      });
-      
-      // Clean up invalid tokens
-      await supabase
-        .from('garmin_tokens')
-        .delete()
-        .eq('user_id', user.id);
-      
-      throw new Error('Tokens inválidos do Garmin detectados e removidos. Por favor, conecte novamente sua conta Garmin.');
-    }
-
-    // Check for demo/UUID tokens (these are invalid OAuth 1.0 tokens)
-    if (tokenData.access_token.includes('-') && tokenData.access_token.length === 36) {
-      console.error('Demo tokens detected - user needs to complete OAuth flow');
-      
-      // Clean up demo tokens
-      await supabase
-        .from('garmin_tokens')
-        .delete()
-        .eq('user_id', user.id);
-      
-      throw new Error('Tokens de demonstração detectados e removidos. Por favor, complete o processo de autorização do Garmin Connect novamente.');
-    }
-
-    // Additional validation for OAuth 1.0 token format
-    if (tokenData.access_token.length < 10 || tokenData.token_secret.length < 10) {
-      console.error('Token format appears invalid:', {
-        accessTokenLength: tokenData.access_token.length,
-        tokenSecretLength: tokenData.token_secret.length
-      });
-      
-      // Clean up invalid format tokens
-      await supabase
-        .from('garmin_tokens')
-        .delete()
-        .eq('user_id', user.id);
-      
-      throw new Error('Formato de token inválido detectado e removido. Por favor, reconecte sua conta Garmin.');
-    }
-
-    // Check if tokens are expired
-    const expiresAt = new Date(tokenData.expires_at);
-    const now = new Date();
-    if (expiresAt <= now) {
-      console.error('Tokens expired:', { expiresAt, now });
-      throw new Error('Garmin tokens have expired. Please reconnect your Garmin account.');
-    }
-
-    // Token validation passed
-    console.log('Garmin tokens validated successfully');
-    console.log('Token expires at:', tokenData.expires_at);
-
-
-    const accessToken = tokenData.access_token;
-    const tokenSecret = tokenData.token_secret;
+    console.log('✅ Valid Garmin tokens obtained successfully');
 
     // Clean up any demo activities first
     console.log('Cleaning up demo activities...');
