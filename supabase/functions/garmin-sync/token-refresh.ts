@@ -21,15 +21,32 @@ export async function refreshGarminTokens(
   try {
     console.log('🔄 Attempting to refresh Garmin tokens...');
     
-    // Prepare the request data for OAuth 2.0 token refresh
-    const tokenUrl = 'https://connect.garmin.com/oauth-service/oauth/token';
+    // Garmin uses OAuth 2.0 with JWT tokens
+    // The refresh token is base64 encoded JSON containing refreshTokenValue and garminGuid
+    let decodedRefreshToken;
+    try {
+      const decoded = atob(refreshToken);
+      decodedRefreshToken = JSON.parse(decoded);
+      console.log('Decoded refresh token structure:', { 
+        hasRefreshTokenValue: !!decodedRefreshToken.refreshTokenValue,
+        hasGarminGuid: !!decodedRefreshToken.garminGuid 
+      });
+    } catch (decodeError) {
+      console.error('Failed to decode refresh token:', decodeError);
+      return {
+        success: false,
+        error: 'Invalid refresh token format'
+      };
+    }
     
-    // Create Basic Auth header for client credentials
-    const authHeader = btoa(`${clientId}:${clientSecret}`);
+    // Prepare the request data for Garmin OAuth 2.0 token refresh
+    const tokenUrl = 'https://diauth.garmin.com/token';
     
     const requestBody = new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: refreshToken
+      refresh_token: decodedRefreshToken.refreshTokenValue,
+      client_id: clientId,
+      client_secret: clientSecret
     });
 
     console.log('Making token refresh request to Garmin...');
@@ -38,7 +55,6 @@ export async function refreshGarminTokens(
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${authHeader}`,
         'Accept': 'application/json'
       },
       body: requestBody.toString()
@@ -95,10 +111,29 @@ export async function refreshGarminTokens(
       expiresAt: expiresAt.toISOString()
     });
 
+    // For Garmin OAuth 2.0, we need to encode the new refresh token if provided
+    let newRefreshToken = refreshToken; // Default to current refresh token
+    if (tokenData.refresh_token) {
+      // If Garmin provides a new refresh token, use it
+      // Check if it's already properly formatted or needs encoding
+      try {
+        JSON.parse(atob(tokenData.refresh_token));
+        newRefreshToken = tokenData.refresh_token; // It's already base64 encoded
+      } catch {
+        // It might be a plain refresh token that needs to be combined with garmin guid
+        const decodedCurrentToken = JSON.parse(atob(refreshToken));
+        const newTokenObj = {
+          refreshTokenValue: tokenData.refresh_token,
+          garminGuid: decodedCurrentToken.garminGuid
+        };
+        newRefreshToken = btoa(JSON.stringify(newTokenObj));
+      }
+    }
+
     return {
       success: true,
       accessToken: tokenData.access_token,
-      tokenSecret: tokenData.refresh_token || refreshToken, // Use new refresh token if provided
+      tokenSecret: newRefreshToken, // This will be stored as token_secret
       expiresAt: expiresAt.toISOString()
     };
 
@@ -128,7 +163,7 @@ export async function ensureValidTokens(
       .from('garmin_tokens')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (tokenError || !tokenData) {
       return { 
@@ -184,8 +219,8 @@ export async function ensureValidTokens(
         .from('garmin_tokens')
         .update({
           access_token: refreshResult.accessToken,
-          token_secret: refreshResult.tokenSecret,
-          refresh_token: refreshResult.tokenSecret, // Store refresh token
+          token_secret: tokenData.token_secret, // Keep the original token_secret (not refresh token)
+          refresh_token: refreshResult.tokenSecret, // Store new refresh token
           expires_at: refreshResult.expiresAt,
           updated_at: new Date().toISOString()
         })
@@ -203,7 +238,7 @@ export async function ensureValidTokens(
       console.log('✅ Tokens refreshed and updated successfully');
       return {
         accessToken: refreshResult.accessToken!,
-        tokenSecret: refreshResult.tokenSecret!
+        tokenSecret: tokenData.token_secret // Return original token_secret
       };
     }
 
