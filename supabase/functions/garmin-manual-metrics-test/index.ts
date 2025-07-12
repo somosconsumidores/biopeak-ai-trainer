@@ -19,11 +19,11 @@ serve(async (req) => {
 
     console.log('Testing userMetrics endpoint with timestamps: 1751994000, 1752080400');
     
-    // Get test user tokens
+    // Get test user tokens - try any available user
     const { data: tokens, error: tokenError } = await supabase
       .from('garmin_tokens')
       .select('*')
-      .eq('user_id', 'd0f0c519-dc4c-4f3e-a7f4-114834fd1f4d')
+      .limit(1)
       .single();
 
     if (tokenError || !tokens) {
