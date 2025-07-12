@@ -204,8 +204,8 @@ serve(async (req) => {
       error: healthError
     });
     
-    // Fetch user metrics data from User Metrics API (for VO2 Max)
-    console.log('=== FETCHING USER METRICS (VO2 MAX) ===');
+    // Fetch user metrics data from User Metrics API (for VO2 Max) - NEW 90-DAY APPROACH
+    console.log('=== FETCHING USER METRICS (VO2 MAX) - 90 DAY HISTORICAL ===');
     const { data: userMetricsData, lastError: userMetricsError } = await fetchGarminUserMetrics(
       accessToken, tokenSecret, clientId, clientSecret
     );
@@ -213,7 +213,9 @@ serve(async (req) => {
       hasData: !!userMetricsData,
       dataLength: userMetricsData?.length || 0,
       error: userMetricsError,
-      sampleData: userMetricsData?.[0] ? JSON.stringify(userMetricsData[0], null, 2) : 'No data'
+      sampleData: userMetricsData?.slice(0, 2).map((item, index) => 
+        `Record ${index + 1}: ${JSON.stringify(item, null, 2)}`
+      ).join('\n') || 'No data'
     });
 
     let processedActivities = [];

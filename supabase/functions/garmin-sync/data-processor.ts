@@ -297,13 +297,13 @@ export function processVo2MaxData(healthData: any, userId: string) {
   return vo2MaxRecords;
 }
 
-// Process User Metrics API response data (primary source for VO2 Max)
+// Process User Metrics API response data (primary source for VO2 Max and Fitness Age)
 export function processUserMetricsData(userMetricsData: any, userId: string) {
   console.log('=== GARMIN USER METRICS PROCESSING START ===');
   console.log('Processing Garmin user metrics for user:', userId);
   console.log('Raw user metrics data type:', typeof userMetricsData);
   console.log('Raw user metrics data length:', Array.isArray(userMetricsData) ? userMetricsData.length : 'Not array');
-  console.log('Raw user metrics data structure:', JSON.stringify(userMetricsData, null, 2));
+  console.log('Raw user metrics data structure (first 2000 chars):', JSON.stringify(userMetricsData, null, 2).substring(0, 2000));
   
   if (!Array.isArray(userMetricsData)) {
     console.warn('User metrics data is not an array:', typeof userMetricsData);
@@ -332,90 +332,62 @@ export function processUserMetricsData(userMetricsData: any, userId: string) {
     console.log('Raw metrics keys:', Object.keys(metricsData || {}));
     console.log('Full metrics object:', JSON.stringify(metricsData, null, 2));
     
-    // Extract VO2 Max value from User Metrics API response with comprehensive search
+    // Extract VO2 Max and Fitness Age values from the response
+    // Based on the working example, the structure is:
+    // { "summaryId": "x541cc74-686c5f80", "calendarDate": "2025-07-08", "vo2Max": 48, "fitnessAge": 40, "enhanced": true }
+    
     let vo2MaxValue = null;
-    let vo2MaxCycling = null;
     let fitnessAge = null;
+    let measurementDate = null;
     
-    // Search for VO2 Max in all possible field names and structures
-    const vo2MaxFields = [
-      'vo2Max', 'vo2MaxValue', 'vo2max', 'VO2Max', 'VO2_MAX',
-      'maxOxygenUptake', 'oxygenUptake', 'aerobicCapacity'
-    ];
-    
-    // Direct field search
-    for (const field of vo2MaxFields) {
-      if (metricsData[field] && typeof metricsData[field] === 'number' && metricsData[field] > 0) {
-        vo2MaxValue = metricsData[field];
-        break;
-      }
+    // Direct field extraction from Garmin API response
+    if (metricsData.vo2Max && typeof metricsData.vo2Max === 'number' && metricsData.vo2Max > 0) {
+      vo2MaxValue = metricsData.vo2Max;
+      console.log(`✅ Found vo2Max value: ${vo2MaxValue}`);
     }
     
-    // Search in nested objects
-    if (!vo2MaxValue) {
-      const nestedObjects = [
-        metricsData.metrics, metricsData.userMetrics, metricsData.data, 
-        metricsData.measurements, metricsData.fitnessData, metricsData.cardio
-      ];
-      
-      for (const obj of nestedObjects) {
-        if (obj && typeof obj === 'object') {
-          for (const field of vo2MaxFields) {
-            if (obj[field] && typeof obj[field] === 'number' && obj[field] > 0) {
-              vo2MaxValue = obj[field];
-              break;
-            }
-          }
-          if (vo2MaxValue) break;
-        }
-      }
+    if (metricsData.fitnessAge && typeof metricsData.fitnessAge === 'number' && metricsData.fitnessAge > 0) {
+      fitnessAge = metricsData.fitnessAge;
+      console.log(`✅ Found fitnessAge value: ${fitnessAge}`);
     }
     
-    // Search in measurements array if exists
-    if (!vo2MaxValue && Array.isArray(metricsData.measurements)) {
-      for (const measurement of metricsData.measurements) {
-        if (measurement && (
-          measurement.type === 'VO2_MAX' || 
-          measurement.metricType === 'vo2Max' ||
-          measurement.name === 'vo2Max'
-        ) && measurement.value) {
-          vo2MaxValue = measurement.value;
-          break;
-        }
-      }
+    // Extract measurement date
+    if (metricsData.calendarDate) {
+      measurementDate = metricsData.calendarDate;
+      console.log(`✅ Found measurement date: ${measurementDate}`);
+    } else if (metricsData.summaryDate) {
+      measurementDate = metricsData.summaryDate;
+    } else {
+      // Use current date as fallback
+      measurementDate = new Date().toISOString().split('T')[0];
+      console.log(`⚠️ No date found, using current date: ${measurementDate}`);
     }
     
-    // Look for cycling VO2 Max
-    vo2MaxCycling = metricsData.vo2MaxCycling || metricsData.vo2MaxBike || null;
-    
-    // Get fitness age if available
-    fitnessAge = metricsData.fitnessAge || null;
-    
-    const measurementDate = metricsData.calendarDate || metricsData.summaryDate || 
-                           metricsData.measurementDate || metricsData.date ||
-                           new Date().toISOString().split('T')[0];
-    
-    console.log('Extracted values:', {
-      vo2MaxValue,
-      vo2MaxCycling,
-      fitnessAge,
-      measurementDate
+    console.log('Data extraction results:', {
+      vo2Max: metricsData.vo2Max,
+      fitnessAge: metricsData.fitnessAge,
+      calendarDate: metricsData.calendarDate,
+      summaryId: metricsData.summaryId,
+      enhanced: metricsData.enhanced,
+      extractedVo2Max: vo2MaxValue,
+      extractedFitnessAge: fitnessAge,
+      extractedDate: measurementDate
     });
     
-    // Process VO2 Max (running/general)
-    if (vo2MaxValue && vo2MaxValue > 0) {
+    // Create VO2 Max record if we have valid data
+    if ((vo2MaxValue && vo2MaxValue > 0) || (fitnessAge && fitnessAge > 0)) {
       const vo2MaxRecord = {
         user_id: userId,
-        vo2_max_value: parseFloat(vo2MaxValue.toString()),
+        vo2_max_value: vo2MaxValue ? parseFloat(vo2MaxValue.toString()) : null,
+        fitness_age: fitnessAge ? parseInt(fitnessAge.toString()) : null,
         measurement_date: measurementDate
       };
       
-      console.log('Found VO2 Max data:', vo2MaxRecord);
+      console.log('✅ Found VO2 Max/Fitness Age data:', vo2MaxRecord);
       vo2MaxRecords.push(vo2MaxRecord);
+    } else {
+      console.log('❌ No valid VO2 Max or Fitness Age data in this record');
     }
-    
-    // Could also process cycling VO2 Max if we want to store it separately
-    // For now, we'll focus on the main VO2 Max value
     
     console.log(`=== USER METRICS ${index + 1} PROCESSING COMPLETE ===\n`);
   }

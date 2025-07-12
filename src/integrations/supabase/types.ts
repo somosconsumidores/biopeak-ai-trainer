@@ -296,6 +296,7 @@ export type Database = {
       garmin_vo2_max: {
         Row: {
           created_at: string
+          fitness_age: number | null
           id: string
           measurement_date: string
           updated_at: string
@@ -304,6 +305,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          fitness_age?: number | null
           id?: string
           measurement_date: string
           updated_at?: string
@@ -312,6 +314,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          fitness_age?: number | null
           id?: string
           measurement_date?: string
           updated_at?: string

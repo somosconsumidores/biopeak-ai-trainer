@@ -111,10 +111,74 @@ export async function fetchGarminDailyHealth(accessToken: string, tokenSecret: s
   return await testApiEndpoints('DAILY HEALTH', healthEndpoints, accessToken, tokenSecret, clientId, clientSecret);
 }
 
-// Fetch user metrics from User Metrics API (includes VO2 Max data)
+// Fetch user metrics from User Metrics API with 24-hour loops for 90 days
 export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
-  const { userMetrics: userMetricsEndpoints } = getGarminApiEndpoints();
-  return await testApiEndpoints('USER METRICS', userMetricsEndpoints, accessToken, tokenSecret, clientId, clientSecret);
+  console.log('===== STARTING VO2 MAX HISTORICAL FETCH (90 DAYS) =====');
+  
+  const baseUrl = 'https://apis.garmin.com';
+  const now = new Date();
+  const allVo2MaxData = [];
+  let lastError = null;
+  
+  // Generate 90 days of 24-hour intervals
+  for (let dayOffset = 0; dayOffset < 90; dayOffset++) {
+    const startTime = new Date(now.getTime() - ((dayOffset + 1) * 24 * 60 * 60 * 1000));
+    const endTime = new Date(now.getTime() - (dayOffset * 24 * 60 * 60 * 1000));
+    
+    const startTimestamp = Math.floor(startTime.getTime() / 1000);
+    const endTimestamp = Math.floor(endTime.getTime() / 1000);
+    
+    const url = `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${startTimestamp}&uploadEndTimeInSeconds=${endTimestamp}`;
+    
+    console.log(`\n[Day ${dayOffset + 1}/90] ===== FETCHING VO2 MAX DATA =====`);
+    console.log(`Date range: ${startTime.toISOString().split('T')[0]} to ${endTime.toISOString().split('T')[0]}`);
+    console.log(`Timestamps: ${startTimestamp} to ${endTimestamp}`);
+    console.log(`URL: ${url}`);
+    
+    try {
+      const response = await makeGarminApiCall(url, accessToken, tokenSecret, clientId, clientSecret);
+      
+      if (response.ok) {
+        const dayData = await response.json();
+        console.log(`📊 Response for day ${dayOffset + 1}:`, JSON.stringify(dayData, null, 2));
+        
+        if (Array.isArray(dayData) && dayData.length > 0) {
+          console.log(`✅ Found ${dayData.length} user metrics records for day ${dayOffset + 1}`);
+          allVo2MaxData.push(...dayData);
+        } else {
+          console.log(`ℹ️ No user metrics data for day ${dayOffset + 1}`);
+        }
+      } else {
+        const errorText = await response.text();
+        console.error(`❌ Day ${dayOffset + 1} failed: Status ${response.status} - ${errorText.substring(0, 150)}`);
+        lastError = `Day ${dayOffset + 1}: HTTP ${response.status}`;
+        
+        // Stop if rate limited
+        if (response.status === 429) {
+          console.log('🛑 Stopping due to rate limiting');
+          break;
+        }
+      }
+    } catch (error) {
+      console.error(`💥 Exception on day ${dayOffset + 1}:`, error);
+      lastError = `Day ${dayOffset + 1}: ${error.message}`;
+    }
+    
+    // Small delay to avoid rate limiting
+    if (dayOffset < 89) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  console.log(`===== VO2 MAX HISTORICAL FETCH COMPLETE =====`);
+  console.log(`📊 Total records collected: ${allVo2MaxData.length}`);
+  console.log(`📋 Last error: ${lastError}`);
+  
+  return { 
+    data: allVo2MaxData, 
+    lastError, 
+    attemptedEndpoints: [`90 days of userMetrics endpoints (24h intervals)`] 
+  };
 }
 
 // Check user permissions
