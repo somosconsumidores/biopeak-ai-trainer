@@ -374,19 +374,24 @@ export function processUserMetricsData(userMetricsData: any, userId: string) {
       extractedDate: measurementDate
     });
     
-    // Create VO2 Max record if we have valid data
+    // Create VO2 Max record if we have VO2 Max data OR Fitness Age data (or both)
+    // We want to store historical records even if only one metric is available
     if ((vo2MaxValue && vo2MaxValue > 0) || (fitnessAge && fitnessAge > 0)) {
       const vo2MaxRecord = {
         user_id: userId,
-        vo2_max_value: vo2MaxValue ? parseFloat(vo2MaxValue.toString()) : null,
-        fitness_age: fitnessAge ? parseInt(fitnessAge.toString()) : null,
+        vo2_max_value: vo2MaxValue && vo2MaxValue > 0 ? parseFloat(vo2MaxValue.toString()) : null,
+        fitness_age: fitnessAge && fitnessAge > 0 ? parseInt(fitnessAge.toString()) : null,
         measurement_date: measurementDate
       };
       
-      console.log('✅ Found VO2 Max/Fitness Age data:', vo2MaxRecord);
+      console.log('✅ Creating VO2 Max/Fitness Age record:', vo2MaxRecord);
+      console.log(`   - VO2 Max: ${vo2MaxRecord.vo2_max_value} (original: ${vo2MaxValue})`);
+      console.log(`   - Fitness Age: ${vo2MaxRecord.fitness_age} (original: ${fitnessAge})`);
+      console.log(`   - Date: ${vo2MaxRecord.measurement_date}`);
       vo2MaxRecords.push(vo2MaxRecord);
     } else {
       console.log('❌ No valid VO2 Max or Fitness Age data in this record');
+      console.log(`   - vo2MaxValue: ${vo2MaxValue}, fitnessAge: ${fitnessAge}`);
     }
     
     console.log(`=== USER METRICS ${index + 1} PROCESSING COMPLETE ===\n`);
