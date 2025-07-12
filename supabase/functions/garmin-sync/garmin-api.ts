@@ -111,103 +111,73 @@ export async function fetchGarminDailyHealth(accessToken: string, tokenSecret: s
   return await testApiEndpoints('DAILY HEALTH', healthEndpoints, accessToken, tokenSecret, clientId, clientSecret);
 }
 
-// Fetch user metrics from User Metrics API - optimized approach
+// Fetch user metrics from User Metrics API with 24-hour loops for 90 days
 export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
-  console.log('===== STARTING VO2 MAX FETCH (OPTIMIZED) =====');
+  console.log('===== STARTING VO2 MAX HISTORICAL FETCH (90 DAYS) =====');
   
   const baseUrl = 'https://apis.garmin.com';
   const now = new Date();
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-  
-  // Try optimized endpoints first (larger date ranges)
-  const optimizedEndpoints = [
-    // Try full 90-day range first
-    `${baseUrl}/wellness-api/rest/userMetrics?metricType=vo2Max&startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-    `${baseUrl}/wellness-api/rest/userMetrics?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-    // Try 30-day chunks
-    `${baseUrl}/wellness-api/rest/userMetrics?startDate=${new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-  ];
-  
-  console.log('Testing optimized endpoints first...');
-  for (let i = 0; i < optimizedEndpoints.length; i++) {
-    const endpoint = optimizedEndpoints[i];
-    console.log(`\n[Optimized ${i + 1}/${optimizedEndpoints.length}] Testing: ${endpoint}`);
-    
-    try {
-      const response = await makeGarminApiCall(endpoint, accessToken, tokenSecret, clientId, clientSecret);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ Optimized endpoint successful! Found ${Array.isArray(data) ? data.length : 1} records`);
-        return { 
-          data: Array.isArray(data) ? data : [data], 
-          lastError: null, 
-          attemptedEndpoints: [endpoint] 
-        };
-      } else {
-        const errorText = await response.text();
-        console.error(`❌ Optimized endpoint failed: Status ${response.status} - ${errorText.substring(0, 150)}`);
-      }
-    } catch (error) {
-      console.error(`💥 Exception on optimized endpoint:`, error);
-    }
-  }
-  
-  // If optimized approach fails, fall back to weekly chunks (more manageable than daily)
-  console.log('\n===== FALLING BACK TO WEEKLY CHUNKS =====');
   const allVo2MaxData = [];
   let lastError = null;
   
-  // Try 7-day chunks going backwards in time (13 weeks = 91 days)
-  for (let weekOffset = 0; weekOffset < 13; weekOffset++) {
-    // Calculate dates going backwards from today
-    const endTime = new Date(now.getTime() - (weekOffset * 7 * 24 * 60 * 60 * 1000));
-    const startTime = new Date(endTime.getTime() - (7 * 24 * 60 * 60 * 1000));
+  // Generate 90 days of 24-hour intervals
+  for (let dayOffset = 0; dayOffset < 90; dayOffset++) {
+    const startTime = new Date(now.getTime() - ((dayOffset + 1) * 24 * 60 * 60 * 1000));
+    const endTime = new Date(now.getTime() - (dayOffset * 24 * 60 * 60 * 1000));
     
-    const url = `${baseUrl}/wellness-api/rest/userMetrics?startDate=${startTime.toISOString().split('T')[0]}&endDate=${endTime.toISOString().split('T')[0]}`;
+    const startTimestamp = Math.floor(startTime.getTime() / 1000);
+    const endTimestamp = Math.floor(endTime.getTime() / 1000);
     
-    console.log(`\n[Week ${weekOffset + 1}/13] Fetching: ${startTime.toISOString().split('T')[0]} to ${endTime.toISOString().split('T')[0]}`);
+    const url = `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${startTimestamp}&uploadEndTimeInSeconds=${endTimestamp}`;
+    
+    console.log(`\n[Day ${dayOffset + 1}/90] ===== FETCHING VO2 MAX DATA =====`);
+    console.log(`Date range: ${startTime.toISOString().split('T')[0]} to ${endTime.toISOString().split('T')[0]}`);
+    console.log(`Timestamps: ${startTimestamp} to ${endTimestamp}`);
+    console.log(`URL: ${url}`);
     
     try {
       const response = await makeGarminApiCall(url, accessToken, tokenSecret, clientId, clientSecret);
       
       if (response.ok) {
-        const weekData = await response.json();
+        const dayData = await response.json();
+        console.log(`📊 Response for day ${dayOffset + 1}:`, JSON.stringify(dayData, null, 2));
         
-        if (Array.isArray(weekData) && weekData.length > 0) {
-          console.log(`✅ Week ${weekOffset + 1}: Found ${weekData.length} records`);
-          allVo2MaxData.push(...weekData);
+        if (Array.isArray(dayData) && dayData.length > 0) {
+          console.log(`✅ Found ${dayData.length} user metrics records for day ${dayOffset + 1}`);
+          allVo2MaxData.push(...dayData);
         } else {
-          console.log(`ℹ️ Week ${weekOffset + 1}: No data`);
+          console.log(`ℹ️ No user metrics data for day ${dayOffset + 1}`);
         }
       } else {
         const errorText = await response.text();
-        console.error(`❌ Week ${weekOffset + 1} failed: Status ${response.status}`);
-        lastError = `Week ${weekOffset + 1}: HTTP ${response.status}`;
+        console.error(`❌ Day ${dayOffset + 1} failed: Status ${response.status} - ${errorText.substring(0, 150)}`);
+        lastError = `Day ${dayOffset + 1}: HTTP ${response.status}`;
         
+        // Stop if rate limited
         if (response.status === 429) {
-          console.log('🛑 Rate limited, stopping');
+          console.log('🛑 Stopping due to rate limiting');
           break;
         }
       }
     } catch (error) {
-      console.error(`💥 Week ${weekOffset + 1} exception:`, error);
-      lastError = `Week ${weekOffset + 1}: ${error.message}`;
+      console.error(`💥 Exception on day ${dayOffset + 1}:`, error);
+      lastError = `Day ${dayOffset + 1}: ${error.message}`;
     }
     
-    // Shorter delay between weeks
-    if (weekOffset < 12) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+    // Small delay to avoid rate limiting
+    if (dayOffset < 89) {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
   
-  console.log(`===== VO2 MAX FETCH COMPLETE =====`);
-  console.log(`📊 Total records: ${allVo2MaxData.length}`);
+  console.log(`===== VO2 MAX HISTORICAL FETCH COMPLETE =====`);
+  console.log(`📊 Total records collected: ${allVo2MaxData.length}`);
+  console.log(`📋 Last error: ${lastError}`);
   
   return { 
     data: allVo2MaxData, 
     lastError, 
-    attemptedEndpoints: ['Weekly chunks fallback'] 
+    attemptedEndpoints: [`90 days of userMetrics endpoints (24h intervals)`] 
   };
 }
 
