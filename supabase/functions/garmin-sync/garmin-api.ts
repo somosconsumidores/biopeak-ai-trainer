@@ -158,10 +158,11 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
   const allVo2MaxData = [];
   let lastError = null;
   
-  // Try 7-day chunks instead of daily (13 weeks = 91 days)
+  // Try 7-day chunks going backwards in time (13 weeks = 91 days)
   for (let weekOffset = 0; weekOffset < 13; weekOffset++) {
-    const startTime = new Date(now.getTime() - ((weekOffset + 1) * 7 * 24 * 60 * 60 * 1000));
+    // Calculate dates going backwards from today
     const endTime = new Date(now.getTime() - (weekOffset * 7 * 24 * 60 * 60 * 1000));
+    const startTime = new Date(endTime.getTime() - (7 * 24 * 60 * 60 * 1000));
     
     const url = `${baseUrl}/wellness-api/rest/userMetrics?startDate=${startTime.toISOString().split('T')[0]}&endDate=${endTime.toISOString().split('T')[0]}`;
     
