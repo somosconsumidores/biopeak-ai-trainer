@@ -148,17 +148,43 @@ export async function verifyInsertedData(supabase: any, userId: string) {
 
 // Insert Garmin VO2 Max data
 export async function insertGarminVo2Max(supabase: any, vo2MaxData: any[]) {
+  console.log(`=== VO2 MAX INSERTION PROCESS STARTED ===`);
   console.log(`Processing ${vo2MaxData.length} VO2 Max records for insertion`);
-  if (vo2MaxData.length > 0) {
-    console.log('Sample VO2 Max data:', JSON.stringify(vo2MaxData[0], null, 2));
-  }
-
+  
   if (vo2MaxData.length === 0) {
-    console.log('No VO2 Max data to insert');
+    console.log('❌ No VO2 Max data to insert');
     return [];
   }
 
-  // Insert VO2 Max data with upsert to handle duplicates
+  // Log detailed information about each record being inserted
+  console.log('📊 VO2 Max Records to be inserted:');
+  vo2MaxData.forEach((record, index) => {
+    console.log(`   ${index + 1}. Date: ${record.measurement_date}, VO2: ${record.vo2_max_value}, Fitness Age: ${record.fitness_age}, User: ${record.user_id}`);
+  });
+  
+  console.log('Sample VO2 Max data structure:', JSON.stringify(vo2MaxData[0], null, 2));
+
+  // Check existing records before insertion
+  const { data: existingRecords, error: existingError } = await supabase
+    .from('garmin_vo2_max')
+    .select('measurement_date, vo2_max_value, fitness_age')
+    .eq('user_id', vo2MaxData[0]?.user_id)
+    .order('measurement_date', { ascending: false });
+
+  if (!existingError) {
+    console.log(`📈 Found ${existingRecords?.length || 0} existing VO2 Max records for user`);
+    if (existingRecords && existingRecords.length > 0) {
+      console.log('🔍 Recent existing records:');
+      existingRecords.slice(0, 3).forEach((record, index) => {
+        console.log(`   ${index + 1}. Date: ${record.measurement_date}, VO2: ${record.vo2_max_value}, Fitness Age: ${record.fitness_age}`);
+      });
+    }
+  } else {
+    console.error('❌ Error checking existing records:', existingError);
+  }
+
+  // Attempt upsert operation
+  console.log('🔄 Starting upsert operation...');
   const { data: insertedData, error: insertError } = await supabase
     .from('garmin_vo2_max')
     .upsert(vo2MaxData, { 
@@ -168,41 +194,95 @@ export async function insertGarminVo2Max(supabase: any, vo2MaxData: any[]) {
     .select();
 
   if (insertError) {
-    console.error('Error inserting VO2 Max data:', insertError);
-    console.error('Error details:', JSON.stringify(insertError, null, 2));
+    console.error('❌ UPSERT FAILED - Error inserting VO2 Max data:', insertError);
+    console.error('❌ Error details:', JSON.stringify(insertError, null, 2));
+    console.error('❌ Error code:', insertError.code);
+    console.error('❌ Error message:', insertError.message);
     
-    // If upsert fails, try individual inserts
-    console.log('Attempting individual VO2 Max inserts as fallback...');
+    // If upsert fails, try individual inserts with detailed logging
+    console.log('🔧 Attempting individual VO2 Max inserts as fallback...');
     let successCount = 0;
+    const individualResults = [];
     
-    for (const vo2MaxRecord of vo2MaxData) {
+    for (let i = 0; i < vo2MaxData.length; i++) {
+      const vo2MaxRecord = vo2MaxData[i];
+      console.log(`🔄 Inserting individual record ${i + 1}/${vo2MaxData.length}:`, JSON.stringify(vo2MaxRecord, null, 2));
+      
       try {
-        const { error: singleError } = await supabase
+        const { data: singleData, error: singleError } = await supabase
           .from('garmin_vo2_max')
-          .insert(vo2MaxRecord)
+          .upsert(vo2MaxRecord, { 
+            onConflict: 'user_id,measurement_date',
+            ignoreDuplicates: false 
+          })
           .select();
           
         if (!singleError) {
           successCount++;
+          individualResults.push(singleData);
+          console.log(`✅ Successfully inserted/updated record ${i + 1}: ${vo2MaxRecord.measurement_date}`);
         } else {
-          console.error(`Failed to insert VO2 Max record ${vo2MaxRecord.measurement_date}:`, singleError);
+          console.error(`❌ Failed to insert VO2 Max record ${vo2MaxRecord.measurement_date}:`, singleError);
+          console.error(`❌ Single error details:`, JSON.stringify(singleError, null, 2));
         }
       } catch (singleInsertError) {
-        console.error(`Exception inserting VO2 Max record ${vo2MaxRecord.measurement_date}:`, singleInsertError);
+        console.error(`❌ Exception inserting VO2 Max record ${vo2MaxRecord.measurement_date}:`, singleInsertError);
       }
     }
     
-    console.log(`Successfully inserted ${successCount} VO2 Max records individually`);
+    console.log(`📊 Individual insert results: ${successCount}/${vo2MaxData.length} successful`);
     
     if (successCount === 0) {
       throw new Error(`Failed to insert any VO2 Max data: ${insertError.message}`);
     }
+    
+    return individualResults.flat();
   } else {
-    console.log('Successfully upserted VO2 Max data:', insertedData?.length || vo2MaxData.length);
+    console.log('✅ Successfully upserted VO2 Max data!');
+    console.log(`📊 Records processed: ${insertedData?.length || vo2MaxData.length}`);
+    
     if (insertedData && insertedData.length > 0) {
-      console.log('Inserted VO2 Max data sample:', JSON.stringify(insertedData[0], null, 2));
+      console.log('✅ Insertion successful - sample of inserted data:', JSON.stringify(insertedData[0], null, 2));
+      console.log('📈 All inserted records:');
+      insertedData.forEach((record, index) => {
+        console.log(`   ${index + 1}. Date: ${record.measurement_date}, VO2: ${record.vo2_max_value}, Fitness Age: ${record.fitness_age}`);
+      });
+    } else {
+      console.log('⚠️ No data returned from upsert operation (this might be normal for updates)');
     }
   }
 
+  console.log(`=== VO2 MAX INSERTION PROCESS COMPLETED ===`);
   return insertedData;
+}
+
+// Verify VO2 Max data insertion
+export async function verifyVo2MaxInsertion(supabase: any, userId: string) {
+  console.log(`=== VERIFYING VO2 MAX DATA FOR USER ${userId} ===`);
+  
+  const { data: vo2Data, error: vo2Error } = await supabase
+    .from('garmin_vo2_max')
+    .select('*')
+    .eq('user_id', userId)
+    .order('measurement_date', { ascending: false });
+
+  if (vo2Error) {
+    console.error('❌ Error verifying VO2 Max data:', vo2Error);
+    return null;
+  } else {
+    console.log(`📊 Verification: Found ${vo2Data?.length || 0} VO2 Max records in database for user`);
+    
+    if (vo2Data && vo2Data.length > 0) {
+      console.log('📈 All VO2 Max records in database:');
+      vo2Data.forEach((record, index) => {
+        console.log(`   ${index + 1}. ${record.measurement_date}: VO2=${record.vo2_max_value}, Fitness Age=${record.fitness_age}, ID=${record.id}`);
+      });
+      
+      console.log('🔍 Recent VO2 Max records details:', JSON.stringify(vo2Data.slice(0, 3), null, 2));
+    } else {
+      console.log('❌ No VO2 Max records found in database!');
+    }
+    
+    return vo2Data;
+  }
 }

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
 import { fetchGarminActivities, fetchGarminDailyHealth, fetchGarminUserMetrics, checkGarminPermissions } from './garmin-api.ts';
 import { processGarminActivities, processDailyHealthData, processVo2MaxData, processUserMetricsData, createFallbackActivities, createFallbackDailyHealth } from './data-processor.ts';
-import { insertGarminActivities, insertGarminDailyHealth, insertGarminVo2Max, verifyInsertedData } from './database-operations.ts';
+import { insertGarminActivities, insertGarminDailyHealth, insertGarminVo2Max, verifyInsertedData, verifyVo2MaxInsertion } from './database-operations.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -405,6 +405,11 @@ serve(async (req) => {
     // Verify insertion
     if (insertedActivities > 0 || insertedHealthRecords > 0 || insertedVo2MaxRecords > 0) {
       await verifyInsertedData(supabase, user.id);
+      
+      // Additional detailed verification for VO2 Max data
+      if (insertedVo2MaxRecords > 0) {
+        await verifyVo2MaxInsertion(supabase, user.id);
+      }
     }
 
     // Get final counts
