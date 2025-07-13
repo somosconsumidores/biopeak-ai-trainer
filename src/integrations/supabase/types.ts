@@ -301,7 +301,7 @@ export type Database = {
           measurement_date: string
           updated_at: string
           user_id: string
-          vo2_max_value: number
+          vo2_max_value: number | null
         }
         Insert: {
           created_at?: string
@@ -310,7 +310,7 @@ export type Database = {
           measurement_date: string
           updated_at?: string
           user_id: string
-          vo2_max_value: number
+          vo2_max_value?: number | null
         }
         Update: {
           created_at?: string
@@ -319,7 +319,7 @@ export type Database = {
           measurement_date?: string
           updated_at?: string
           user_id?: string
-          vo2_max_value?: number
+          vo2_max_value?: number | null
         }
         Relationships: []
       }
