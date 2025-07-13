@@ -119,6 +119,9 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
   const now = new Date();
   const allVo2MaxData = [];
   let lastError = null;
+  let processedDays = 0;
+  let skippedDays = 0;
+  let errors = [];
   
   // Generate 90 days of 24-hour intervals
   for (let dayOffset = 0; dayOffset < 90; dayOffset++) {
@@ -130,54 +133,95 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
     
     const url = `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${startTimestamp}&uploadEndTimeInSeconds=${endTimestamp}`;
     
-    console.log(`\n[Day ${dayOffset + 1}/90] ===== FETCHING VO2 MAX DATA =====`);
-    console.log(`Date range: ${startTime.toISOString().split('T')[0]} to ${endTime.toISOString().split('T')[0]}`);
-    console.log(`Timestamps: ${startTimestamp} to ${endTimestamp}`);
-    console.log(`URL: ${url}`);
+    // Enhanced logging with timestamp details
+    console.log(`\n🔄 [Day ${dayOffset + 1}/90] Processing timestamp range`);
+    console.log(`📅 Date: ${startTime.toISOString().split('T')[0]} to ${endTime.toISOString().split('T')[0]}`);
+    console.log(`⏰ Timestamps: ${startTimestamp} (${new Date(startTimestamp * 1000).toISOString()}) to ${endTimestamp} (${new Date(endTimestamp * 1000).toISOString()})`);
+    console.log(`🔗 URL: ${url}`);
     
-    try {
-      const response = await makeGarminApiCall(url, accessToken, tokenSecret, clientId, clientSecret);
-      
-      if (response.ok) {
-        const dayData = await response.json();
-        console.log(`📊 Response for day ${dayOffset + 1}:`, JSON.stringify(dayData, null, 2));
-        
-        if (Array.isArray(dayData) && dayData.length > 0) {
-          console.log(`✅ Found ${dayData.length} user metrics records for day ${dayOffset + 1}`);
-          allVo2MaxData.push(...dayData);
-        } else {
-          console.log(`ℹ️ No user metrics data for day ${dayOffset + 1}`);
+    let retryCount = 0;
+    const maxRetries = 3;
+    let success = false;
+    
+    while (retryCount < maxRetries && !success) {
+      try {
+        if (retryCount > 0) {
+          console.log(`🔄 Retry attempt ${retryCount}/${maxRetries - 1} for day ${dayOffset + 1}`);
         }
-      } else {
-        const errorText = await response.text();
-        console.error(`❌ Day ${dayOffset + 1} failed: Status ${response.status} - ${errorText.substring(0, 150)}`);
-        lastError = `Day ${dayOffset + 1}: HTTP ${response.status}`;
         
-        // Stop if rate limited
-        if (response.status === 429) {
-          console.log('🛑 Stopping due to rate limiting');
-          break;
+        const response = await makeGarminApiCall(url, accessToken, tokenSecret, clientId, clientSecret);
+        
+        if (response.ok) {
+          const dayData = await response.json();
+          console.log(`📊 response for day ${dayOffset + 1}`, JSON.stringify(dayData, null, 2));
+          
+          if (Array.isArray(dayData) && dayData.length > 0) {
+            console.log(`✅ Found ${dayData.length} user metrics records for day ${dayOffset + 1}`);
+            allVo2MaxData.push(...dayData);
+          } else {
+            console.log(`ℹ️ No user metrics data for day ${dayOffset + 1}`);
+          }
+          processedDays++;
+          success = true;
+        } else {
+          const errorText = await response.text();
+          console.error(`❌ Day ${dayOffset + 1} failed: Status ${response.status} - ${errorText.substring(0, 150)}`);
+          
+          if (response.status === 429) {
+            console.log(`⏸️ Rate limited on day ${dayOffset + 1}, waiting longer before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1))); // Exponential backoff
+            retryCount++;
+          } else if (response.status === 401 || response.status === 403) {
+            console.log(`🔒 Authentication error on day ${dayOffset + 1}, stopping retries`);
+            lastError = `Day ${dayOffset + 1}: HTTP ${response.status} - Authentication failed`;
+            errors.push(`Day ${dayOffset + 1}: HTTP ${response.status}`);
+            break; // Stop retrying for auth errors
+          } else {
+            console.log(`🔄 Retrying day ${dayOffset + 1} after error ${response.status}`);
+            lastError = `Day ${dayOffset + 1}: HTTP ${response.status}`;
+            errors.push(`Day ${dayOffset + 1}: HTTP ${response.status}`);
+            retryCount++;
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Progressive delay
+          }
+        }
+      } catch (error) {
+        console.error(`💥 Exception on day ${dayOffset + 1}, attempt ${retryCount + 1}:`, error);
+        lastError = `Day ${dayOffset + 1}: ${error.message}`;
+        errors.push(`Day ${dayOffset + 1}: ${error.message}`);
+        retryCount++;
+        
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
         }
       }
-    } catch (error) {
-      console.error(`💥 Exception on day ${dayOffset + 1}:`, error);
-      lastError = `Day ${dayOffset + 1}: ${error.message}`;
     }
     
-    // Small delay to avoid rate limiting
+    if (!success) {
+      console.error(`💀 Failed to process day ${dayOffset + 1} after ${maxRetries} attempts`);
+      skippedDays++;
+    }
+    
+    // Progressive delay to avoid rate limiting
     if (dayOffset < 89) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      const delay = success ? 250 : 500; // Longer delay if there was an error
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
   
   console.log(`===== VO2 MAX HISTORICAL FETCH COMPLETE =====`);
   console.log(`📊 Total records collected: ${allVo2MaxData.length}`);
+  console.log(`📈 Days processed successfully: ${processedDays}/90`);
+  console.log(`💀 Days skipped due to errors: ${skippedDays}/90`);
   console.log(`📋 Last error: ${lastError}`);
+  console.log(`🔍 All errors encountered: ${errors.length > 0 ? errors.join(', ') : 'None'}`);
   
   return { 
     data: allVo2MaxData, 
     lastError, 
-    attemptedEndpoints: [`90 days of userMetrics endpoints (24h intervals)`] 
+    processedDays,
+    skippedDays,
+    totalErrors: errors.length,
+    attemptedEndpoints: [`90 days of userMetrics endpoints (24h intervals) - Processed: ${processedDays}, Skipped: ${skippedDays}`] 
   };
 }
 
