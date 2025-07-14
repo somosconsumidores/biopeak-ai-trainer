@@ -48,34 +48,29 @@ export function getGarminApiEndpoints() {
   
   // Convert to UTC timestamps in seconds (official API requirement)
   const now = new Date();
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago (API limit)
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // Extended period for VO2 Max
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90 days ago - standard horizon
   
-  // Recent activities (last 24h with uploadStartTimeInSeconds - respects API 24h limit)
-  const uploadStartTime24h = Math.floor(yesterday.getTime() / 1000);
+  // Use 90 days as the standard time horizon for all activity data
   const uploadStartTime90d = Math.floor(ninetyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
   return {
-    // Activity API endpoints - CORRECTED to use wellness-api
+    // Activity API endpoints - using 90-day horizon as requested
     activities: [
-      // Recent activities (last 24h) - respects uploadStartTimeInSeconds limit
-      `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Historical activities using date range (30 days)
-      `${baseUrl}/wellness-api/rest/activities?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Historical activities using timestamp range (90 days)
+      `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      // Historical activities using date range (90 days)
+      `${baseUrl}/wellness-api/rest/activities?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/activities`
     ],
     
-    // Daily Health Stats API endpoints (already correct)
+    // Daily Health Stats API endpoints - using 90-day horizon
     dailyHealth: [
-      // Recent health data (last 24h)
-      `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Historical health data using date range (90 days for VO2 Max fallback)
+      // Historical health data using timestamp range (90 days)
+      `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      // Historical health data using date range (90 days)
       `${baseUrl}/wellness-api/rest/dailies?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-      // Historical health data using date range (30 days)
-      `${baseUrl}/wellness-api/rest/dailies?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/dailies`
     ],
