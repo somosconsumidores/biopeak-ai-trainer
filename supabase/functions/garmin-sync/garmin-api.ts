@@ -48,43 +48,54 @@ export function getGarminApiEndpoints() {
   
   // Convert to UTC timestamps in seconds (official API requirement)
   const now = new Date();
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90 days ago - standard horizon
+  // Use 30 days instead of 90 to avoid API parameter limits (common cause of 400 errors)
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   
-  // Use 90 days as the standard time horizon for all activity data
-  const uploadStartTime90d = Math.floor(ninetyDaysAgo.getTime() / 1000);
+  // Validate timestamps (must be positive integers)
+  const uploadStartTime30d = Math.floor(thirtyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
+  // Validate timestamp range (avoid negative or future timestamps)
+  if (uploadStartTime30d <= 0 || uploadEndTime <= 0 || uploadStartTime30d >= uploadEndTime) {
+    console.error('Invalid timestamp range:', { uploadStartTime30d, uploadEndTime });
+    throw new Error('Invalid timestamp range for Garmin API');
+  }
+  
+  // Format dates correctly for API (YYYY-MM-DD)
+  const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+  const endDate = now.toISOString().split('T')[0];
+  
+  console.log('📅 API Date Range:', { startDate, endDate, uploadStartTime30d, uploadEndTime });
+  
   return {
-    // Activity API endpoints - using 90-day horizon as requested
+    // Activity API endpoints - simplified to reduce 400 errors
     activities: [
-      // Historical activities using timestamp range (90 days)
-      `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Historical activities using date range (90 days)
-      `${baseUrl}/wellness-api/rest/activities?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Use date range (most compatible format)
+      `${baseUrl}/wellness-api/rest/activities?startDate=${startDate}&endDate=${endDate}`,
+      // Use timestamp range (fallback)
+      `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime30d}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/activities`
     ],
     
-    // Daily Health Stats API endpoints - using 90-day horizon
+    // Daily Health Stats API endpoints - simplified to reduce 400 errors
     dailyHealth: [
-      // Historical health data using timestamp range (90 days)
-      `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Historical health data using date range (90 days)
-      `${baseUrl}/wellness-api/rest/dailies?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Use date range (most compatible format)
+      `${baseUrl}/wellness-api/rest/dailies?startDate=${startDate}&endDate=${endDate}`,
+      // Use timestamp range (fallback)
+      `${baseUrl}/wellness-api/rest/dailies?uploadStartTimeInSeconds=${uploadStartTime30d}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/dailies`
     ],
     
-    // User Metrics API endpoints (for VO2 Max data) - MULTIPLE APPROACHES
+    // User Metrics API endpoints - simplified and validated
     userMetrics: [
-      // Use metricType=vo2Max specifically for VO2 Max data
-      `${baseUrl}/wellness-api/rest/userMetrics?metricType=vo2Max&startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-      // Try fitness metrics endpoint
-      `${baseUrl}/wellness-api/rest/fitnessAge?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-      // Extended historical user metrics using date range (90 days for better VO2 Max coverage)
-      `${baseUrl}/wellness-api/rest/userMetrics?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
-      // Extended user metrics with upload timestamps (90 days)
-      `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      // Standard userMetrics with date range (most compatible)
+      `${baseUrl}/wellness-api/rest/userMetrics?startDate=${startDate}&endDate=${endDate}`,
+      // Try specific VO2 Max endpoint
+      `${baseUrl}/wellness-api/rest/userMetrics?metricType=vo2Max&startDate=${startDate}&endDate=${endDate}`,
+      // Use timestamp range (fallback)
+      `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${uploadStartTime30d}&uploadEndTimeInSeconds=${uploadEndTime}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/userMetrics`
     ],
@@ -106,9 +117,9 @@ export async function fetchGarminDailyHealth(accessToken: string, tokenSecret: s
   return await testApiEndpoints('DAILY HEALTH', healthEndpoints, accessToken, tokenSecret, clientId, clientSecret);
 }
 
-// Fetch user metrics from User Metrics API with 24-hour loops for 90 days
+// Fetch user metrics from User Metrics API with 24-hour loops for 30 days
 export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: string, clientId: string, clientSecret: string) {
-  console.log('===== STARTING VO2 MAX HISTORICAL FETCH (90 DAYS) =====');
+  console.log('===== STARTING VO2 MAX HISTORICAL FETCH (30 DAYS) =====');
   
   const baseUrl = 'https://apis.garmin.com';
   const now = new Date();
@@ -118,8 +129,8 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
   let skippedDays = 0;
   let errors = [];
   
-  // Generate 90 days of 24-hour intervals
-  for (let dayOffset = 0; dayOffset < 90; dayOffset++) {
+  // Generate 30 days of 24-hour intervals to avoid API limits
+  for (let dayOffset = 0; dayOffset < 30; dayOffset++) {
     const startTime = new Date(now.getTime() - ((dayOffset + 1) * 24 * 60 * 60 * 1000));
     const endTime = new Date(now.getTime() - (dayOffset * 24 * 60 * 60 * 1000));
     
@@ -129,7 +140,7 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
     const url = `${baseUrl}/wellness-api/rest/userMetrics?uploadStartTimeInSeconds=${startTimestamp}&uploadEndTimeInSeconds=${endTimestamp}`;
     
     // Enhanced logging with timestamp details
-    console.log(`\n🔄 [Day ${dayOffset + 1}/90] Processing timestamp range`);
+    console.log(`\n🔄 [Day ${dayOffset + 1}/30] Processing timestamp range`);
     console.log(`📅 Date: ${startTime.toISOString().split('T')[0]} to ${endTime.toISOString().split('T')[0]}`);
     console.log(`⏰ Timestamps: ${startTimestamp} (${new Date(startTimestamp * 1000).toISOString()}) to ${endTimestamp} (${new Date(endTimestamp * 1000).toISOString()})`);
     console.log(`🔗 URL: ${url}`);
@@ -197,7 +208,7 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
     }
     
     // Progressive delay to avoid rate limiting
-    if (dayOffset < 89) {
+    if (dayOffset < 29) {
       const delay = success ? 250 : 500; // Longer delay if there was an error
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -205,8 +216,8 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
   
   console.log(`===== VO2 MAX HISTORICAL FETCH COMPLETE =====`);
   console.log(`📊 Total records collected: ${allVo2MaxData.length}`);
-  console.log(`📈 Days processed successfully: ${processedDays}/90`);
-  console.log(`💀 Days skipped due to errors: ${skippedDays}/90`);
+  console.log(`📈 Days processed successfully: ${processedDays}/30`);
+  console.log(`💀 Days skipped due to errors: ${skippedDays}/30`);
   console.log(`📋 Last error: ${lastError}`);
   console.log(`🔍 All errors encountered: ${errors.length > 0 ? errors.join(', ') : 'None'}`);
   
@@ -216,7 +227,7 @@ export async function fetchGarminUserMetrics(accessToken: string, tokenSecret: s
     processedDays,
     skippedDays,
     totalErrors: errors.length,
-    attemptedEndpoints: [`90 days of userMetrics endpoints (24h intervals) - Processed: ${processedDays}, Skipped: ${skippedDays}`] 
+    attemptedEndpoints: [`30 days of userMetrics endpoints (24h intervals) - Processed: ${processedDays}, Skipped: ${skippedDays}`] 
   };
 }
 
