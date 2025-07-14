@@ -10,6 +10,8 @@ interface BackfillRequest {
   periodStart: string; // ISO date string
   periodEnd: string;   // ISO date string
   summaryTypes?: string[]; // Array of summary types to backfill
+  userId?: string; // User ID for processor calls (bypasses auth header)
+  retryAttempt?: boolean; // Flag to indicate this is a retry attempt
 }
 
 // Garmin backfill endpoint mapping
@@ -44,26 +46,59 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user from auth header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing Authorization header');
+    // Handle authentication - either from header or request body
+    let userId: string;
+    let requestBody: any = null;
+    
+    if (req.method === 'POST') {
+      requestBody = await req.json();
+      
+      // Check if userId is provided in request body (processor call)
+      if (requestBody.userId) {
+        userId = requestBody.userId;
+        console.log('[Garmin Backfill] Using userId from request body (processor call):', userId);
+      } else {
+        // Direct user call - use auth header
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+          throw new Error('Missing Authorization header');
+        }
+
+        const { data: { user }, error: authError } = await supabase.auth.getUser(
+          authHeader.replace('Bearer ', '')
+        );
+
+        if (authError || !user) {
+          throw new Error('Invalid user token');
+        }
+        
+        userId = user.id;
+        console.log('[Garmin Backfill] User authenticated via header:', userId);
+      }
+    } else {
+      // GET request - always use auth header
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        throw new Error('Missing Authorization header');
+      }
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser(
+        authHeader.replace('Bearer ', '')
+      );
+
+      if (authError || !user) {
+        throw new Error('Invalid user token');
+      }
+      
+      userId = user.id;
+      console.log('[Garmin Backfill] User authenticated via header:', userId);
     }
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-
-    if (authError || !user) {
-      throw new Error('Invalid user token');
-    }
-
-    console.log('[Garmin Backfill] User authenticated:', user.id);
 
     if (req.method === 'POST') {
-      const { periodStart, periodEnd, summaryTypes = ['dailies'] }: BackfillRequest = await req.json();
+      // Use the already parsed request body
+      const { periodStart, periodEnd, summaryTypes = ['dailies'], retryAttempt = false }: BackfillRequest = requestBody;
       
-      console.log('[Garmin Backfill] Requesting backfill for period:', { periodStart, periodEnd });
+      console.log('[Garmin Backfill] Requesting backfill for period:', { periodStart, periodEnd, retryAttempt });
 
       // Validate dates
       const startDate = new Date(periodStart);
@@ -93,7 +128,7 @@ serve(async (req) => {
       const { data: tokenData, error: tokenError } = await supabase
         .from('garmin_tokens')
         .select('access_token, token_secret, consumer_key, expires_at')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (tokenError || !tokenData) {
@@ -127,7 +162,7 @@ serve(async (req) => {
           const { data: existingBackfill } = await supabase
             .from('garmin_backfill_status')
             .select('id, status, is_duplicate')
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .eq('period_start', startDate.toISOString())
             .eq('period_end', endDate.toISOString())
             .eq('summary_type', summaryType)
@@ -151,7 +186,7 @@ serve(async (req) => {
             const { data: newRecord, error: backfillError } = await supabase
               .from('garmin_backfill_status')
               .insert({
-                user_id: user.id,
+                user_id: userId,
                 period_start: startDate.toISOString(),
                 period_end: endDate.toISOString(),
                 summary_type: summaryType,
@@ -230,7 +265,7 @@ serve(async (req) => {
       const { data: backfillStatus, error } = await supabase
         .from('garmin_backfill_status')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('requested_at', { ascending: false });
 
       if (error) {
