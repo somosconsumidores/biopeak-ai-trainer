@@ -201,11 +201,22 @@ const GarminIntegration = () => {
     try {
       // Get current session for proper authorization
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('[GarminIntegration] Session check:', {
+        hasSession: !!session,
+        hasAccessToken: !!session?.access_token,
+        userId: session?.user?.id
+      });
+      
       if (!session?.access_token) {
         throw new Error('Sessão não encontrada. Faça login novamente.');
       }
       
       console.log('[GarminIntegration] Session token available, calling garmin-sync function...');
+      console.log('[GarminIntegration] Function call details:', {
+        timestamp: new Date().toISOString(),
+        sessionUserId: session.user.id,
+        tokenLength: session.access_token.length
+      });
       
       const { data, error } = await supabase.functions.invoke('garmin-sync', {
         headers: {
@@ -214,6 +225,12 @@ const GarminIntegration = () => {
       });
       
       console.log('[GarminIntegration] Garmin sync response:', { data, error });
+      console.log('[GarminIntegration] Response details:', {
+        hasData: !!data,
+        hasError: !!error,
+        errorMessage: error?.message,
+        dataKeys: data ? Object.keys(data) : []
+      });
       
       if (error) {
         console.error('[GarminIntegration] Garmin sync error:', error);
