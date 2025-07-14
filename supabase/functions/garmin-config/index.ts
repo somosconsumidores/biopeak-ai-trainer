@@ -150,6 +150,13 @@ serve(async (req) => {
     // OAuth 2.0 Authorization URL with PKCE (seguindo especificação oficial)
     const redirectUri = 'https://preview--biopeak-ai-trainer.lovable.app/garmin';
     
+    console.log('[garmin-config] ===== OAUTH 2.0 URL GENERATION =====');
+    console.log('[garmin-config] Redirect URI:', redirectUri);
+    console.log('[garmin-config] Client ID:', clientId);
+    console.log('[garmin-config] Code Challenge:', `${codeChallenge.substring(0, 10)}...`);
+    console.log('[garmin-config] Code Verifier stored:', `${codeVerifier.substring(0, 10)}...`);
+    console.log('[garmin-config] ======================================');
+    
     const authParams = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,

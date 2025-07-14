@@ -101,8 +101,11 @@ serve(async (req) => {
 // OAuth 2.0 PKCE Flow Handler
 async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId: string, clientSecret: string) {
   console.log('[garmin-auth] ===== OAuth 2.0 PKCE FLOW =====');
+  console.log('[garmin-auth] User ID:', user.id);
+  console.log('[garmin-auth] Authorization code received:', code ? `${code.substring(0, 10)}...` : 'MISSING');
   
   // Get stored code verifier
+  console.log('[garmin-auth] Retrieving PKCE data from database...');
   const { data: pkceData, error: pkceError } = await supabase
     .from('oauth_temp_tokens')
     .select('*')
@@ -111,12 +114,21 @@ async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId
     .limit(1)
     .single();
 
+  console.log('[garmin-auth] PKCE query result:', {
+    hasData: !!pkceData,
+    error: pkceError?.message,
+    dataId: pkceData?.id,
+    createdAt: pkceData?.created_at,
+    expiresAt: pkceData?.expires_at
+  });
+
   if (pkceError || !pkceData) {
     console.error('[garmin-auth] PKCE data not found:', pkceError);
     throw new Error('PKCE code verifier not found. Please restart the OAuth flow.');
   }
 
   const codeVerifier = pkceData.oauth_token;
+  console.log('[garmin-auth] Code verifier retrieved:', codeVerifier ? `${codeVerifier.substring(0, 10)}...` : 'MISSING');
   
   // Exchange authorization code for access token (seguindo especificação oficial)
   const tokenUrl = 'https://connectapi.garmin.com/di-oauth2-service/oauth/token';
@@ -130,6 +142,18 @@ async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId
     redirect_uri: 'https://preview--biopeak-ai-trainer.lovable.app/garmin'
   });
 
+  console.log('[garmin-auth] ===== TOKEN REQUEST DETAILS =====');
+  console.log('[garmin-auth] Token URL:', tokenUrl);
+  console.log('[garmin-auth] Request parameters:', {
+    grant_type: 'authorization_code',
+    client_id: clientId,
+    client_secret: clientSecret ? `${clientSecret.substring(0, 10)}...` : 'MISSING',
+    code: code ? `${code.substring(0, 10)}...` : 'MISSING',
+    code_verifier: codeVerifier ? `${codeVerifier.substring(0, 10)}...` : 'MISSING',
+    redirect_uri: 'https://preview--biopeak-ai-trainer.lovable.app/garmin'
+  });
+  console.log('[garmin-auth] =====================================');
+  
   console.log('[garmin-auth] Exchanging code for tokens...');
   
   const tokenResponse = await fetch(tokenUrl, {
