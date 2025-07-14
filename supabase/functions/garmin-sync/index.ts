@@ -36,7 +36,8 @@ serve(async (req) => {
       method: req.method,
       url: req.url,
       userAgent: req.headers.get('user-agent'),
-      contentType: req.headers.get('content-type')
+      contentType: req.headers.get('content-type'),
+      hasAuthHeader: !!req.headers.get('authorization')
     });
 
     if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
@@ -45,15 +46,50 @@ serve(async (req) => {
       if (!supabaseKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
       if (!clientId) missing.push('GARMIN_CLIENT_ID');
       if (!clientSecret) missing.push('GARMIN_CLIENT_SECRET');
-      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+      
+      const errorMessage = `Missing required environment variables: ${missing.join(', ')}`;
+      console.error('❌ Environment error:', errorMessage);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: errorMessage,
+          timestamp: new Date().toISOString(),
+          functionName: 'garmin-sync'
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
+    console.log('Authorization header check:', {
+      hasAuthHeader: !!authHeader,
+      authHeaderStart: authHeader ? authHeader.substring(0, 20) + '...' : null,
+      authHeaderLength: authHeader?.length || 0
+    });
+    
     if (!authHeader) {
-      throw new Error('No authorization header provided');
+      const errorMessage = 'No authorization header provided';
+      console.error('❌ Auth error:', errorMessage);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: errorMessage,
+          timestamp: new Date().toISOString(),
+          functionName: 'garmin-sync'
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     console.log('Verifying JWT token...');
@@ -63,8 +99,29 @@ serve(async (req) => {
     );
 
     if (authError || !user) {
-      console.error('JWT verification failed:', authError);
-      throw new Error('Invalid or expired JWT token');
+      console.error('JWT verification failed:', {
+        error: authError,
+        hasUser: !!user,
+        errorMessage: authError?.message,
+        errorStatus: authError?.status
+      });
+      
+      const errorMessage = 'Invalid or expired JWT token';
+      console.error('❌ JWT Auth error:', errorMessage);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: errorMessage,
+          authError: authError?.message,
+          timestamp: new Date().toISOString(),
+          functionName: 'garmin-sync'
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     console.log('JWT verified successfully for user:', user.id);
