@@ -194,8 +194,16 @@ async function handleOAuth2Flow(code: string, user: any, supabase: any, clientId
     const permissions = await permissionsResponse.json();
     console.log('[garmin-auth] User permissions:', permissions);
     
-    if (!permissions.activityExport) {
-      console.warn('[garmin-auth] User does not have ACTIVITY_EXPORT permission');
+    // Check if user has ACTIVITY_EXPORT permission
+    if (permissions.permissions && Array.isArray(permissions.permissions)) {
+      const hasActivityExport = permissions.permissions.includes('ACTIVITY_EXPORT');
+      console.log('[garmin-auth] Permission check - ACTIVITY_EXPORT:', hasActivityExport);
+      
+      if (!hasActivityExport) {
+        console.warn('[garmin-auth] User does not have ACTIVITY_EXPORT permission');
+      }
+    } else {
+      console.warn('[garmin-auth] Permissions format unexpected:', permissions);
     }
   } else {
     console.warn('[garmin-auth] Failed to validate permissions:', permissionsResponse.status);
