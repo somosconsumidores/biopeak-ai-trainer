@@ -48,22 +48,22 @@ export function getGarminApiEndpoints() {
   
   // Convert to UTC timestamps in seconds (official API requirement)
   const now = new Date();
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago (API limit)
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90 days - standard horizon
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // Extended period for VO2 Max
   
-  // Activity timestamps (90 days for comprehensive sync)
+  // Recent activities (last 24h with uploadStartTimeInSeconds - respects API 24h limit)
   const uploadStartTime24h = Math.floor(yesterday.getTime() / 1000);
   const uploadStartTime90d = Math.floor(ninetyDaysAgo.getTime() / 1000);
   const uploadEndTime = Math.floor(now.getTime() / 1000);
   
   return {
-    // Activity API endpoints - Using 90 days as primary horizon
+    // Activity API endpoints - CORRECTED to use wellness-api
     activities: [
-      // Primary: 90 days historical activities using upload timestamps
-      `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime90d}&uploadEndTimeInSeconds=${uploadEndTime}`,
-      // Secondary: 90 days using date range
-      `${baseUrl}/wellness-api/rest/activities?startDate=${ninetyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
+      // Recent activities (last 24h) - respects uploadStartTimeInSeconds limit
+      `${baseUrl}/wellness-api/rest/activities?uploadStartTimeInSeconds=${uploadStartTime24h}&uploadEndTimeInSeconds=${uploadEndTime}`,
+      // Historical activities using date range (30 days)
+      `${baseUrl}/wellness-api/rest/activities?startDate=${thirtyDaysAgo.toISOString().split('T')[0]}&endDate=${now.toISOString().split('T')[0]}`,
       // Fallback without parameters
       `${baseUrl}/wellness-api/rest/activities`
     ],
