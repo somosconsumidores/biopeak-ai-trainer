@@ -189,44 +189,26 @@ Deno.serve(async (req) => {
 
     console.log('[garmin-initiate-backfill] Successfully created backfill records:', successfulPeriods);
 
-    // Now call the garmin-backfill function for each unique period to actually start the process
-    const uniquePeriods = new Set();
-    const periodGroups = new Map();
-    
-    // Group records by period to batch summary types together
-    for (const record of insertedRecords || []) {
-      const periodKey = `${record.period_start}-${record.period_end}`;
-      if (!periodGroups.has(periodKey)) {
-        periodGroups.set(periodKey, []);
-      }
-      periodGroups.get(periodKey).push(record.summary_type);
-      uniquePeriods.add(periodKey);
-    }
-
+    // Call the garmin-backfill-processor to start processing the records
+    console.log('[garmin-initiate-backfill] Calling processor to start backfill processing');
     let processedCount = 0;
-    for (const [periodKey, summaryTypesForPeriod] of periodGroups.entries()) {
-      const [periodStart, periodEnd] = periodKey.split('-');
-      
-      try {
-        const { error: backfillError } = await supabase.functions.invoke('garmin-backfill', {
-          body: {
-            periodStart,
-            periodEnd,
-            summaryTypes: summaryTypesForPeriod
-          },
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        if (!backfillError) {
-          processedCount++;
-        } else {
-          console.error('[garmin-initiate-backfill] Error processing period:', backfillError);
+    
+    try {
+      const { data: processorResult, error: processorError } = await supabase.functions.invoke('garmin-backfill-processor', {
+        body: {
+          userId: user.id,
+          batchSize: Math.min(20, backfillRecords.length)
         }
-      } catch (error) {
-        console.error('[garmin-initiate-backfill] Error calling garmin-backfill:', error);
+      });
+
+      if (processorError) {
+        console.error('[garmin-initiate-backfill] Error calling processor:', processorError);
+      } else {
+        console.log('[garmin-iniciate-backfill] Processor response:', processorResult);
+        processedCount = processorResult?.processed || 0;
       }
+    } catch (error) {
+      console.error('[garmin-initiate-backfill] Error calling garmin-backfill-processor:', error);
     }
 
     return new Response(
