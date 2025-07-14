@@ -48,6 +48,7 @@ serve(async (req) => {
         });
       }
 
+      console.log('📨 Webhook recebido:', JSON.stringify(webhookData, null, 2));
       console.log('=== Webhook Data Received ===');
       console.log('Raw webhook data:', JSON.stringify(webhookData, null, 2));
       console.log('Webhook data keys:', Object.keys(webhookData));
@@ -63,6 +64,7 @@ serve(async (req) => {
 
       // Process webhook notifications using callbackURL pattern
       let processResult = { success: false, message: 'Unknown webhook type' };
+      let allProcessedSuccessfully = true;
 
       // Handle activity notifications with callbackURL
       if (webhookData.activities && Array.isArray(webhookData.activities)) {
@@ -78,7 +80,11 @@ serve(async (req) => {
           
           if (userId && callbackURL) {
             const result = await processActivityCallbackURL(supabase, userId, callbackURL);
-            if (result.success) successCount++;
+            if (result.success) {
+              successCount++;
+            } else {
+              allProcessedSuccessfully = false;
+            }
             totalProcessed++;
           }
         }
@@ -87,35 +93,52 @@ serve(async (req) => {
           success: successCount > 0, 
           message: `Processed ${successCount}/${totalProcessed} activity notifications successfully` 
         };
+        allProcessedSuccessfully = successCount === totalProcessed;
       }
       // Handle user disconnection
       else if (webhookData.deregistrations && Array.isArray(webhookData.deregistrations)) {
         console.log('Processing user disconnection');
         const result = await processUserDisconnection(supabase, webhookData.deregistrations[0]);
         processResult = result;
+        allProcessedSuccessfully = result.success;
       }
       // Handle single notification (fallback)
       else if (webhookData.userId && webhookData.callbackURL) {
         console.log('Processing single activity notification');
         processResult = await processActivityCallbackURL(supabase, webhookData.userId, webhookData.callbackURL);
+        allProcessedSuccessfully = processResult.success;
       }
       else {
         console.log('Unknown webhook format, logging for analysis:', Object.keys(webhookData));
         processResult = { success: true, message: 'Webhook logged for analysis' };
+        allProcessedSuccessfully = true;
       }
 
       console.log('=== Webhook Processing Complete ===');
       console.log('Result:', processResult);
+      console.log('All processed successfully:', allProcessedSuccessfully);
 
-      // Respond with 200 within 30 seconds as required by Garmin
-      return new Response(JSON.stringify({ 
-        success: processResult.success,
-        message: processResult.message,
-        timestamp: new Date().toISOString()
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      // Only respond with 200 if processing was successful (Garmin requirement)
+      if (allProcessedSuccessfully) {
+        return new Response(JSON.stringify({ 
+          success: processResult.success,
+          message: processResult.message,
+          timestamp: new Date().toISOString()
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } else {
+        // Return 500 to trigger Garmin retry
+        return new Response(JSON.stringify({ 
+          success: false,
+          message: processResult.message,
+          timestamp: new Date().toISOString()
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // Handle GET requests for webhook verification
@@ -264,14 +287,28 @@ async function processActivityCallbackURL(supabase: any, userId: string, callbac
       }
     });
 
+    console.log("📡 Resposta do callbackURL:", callbackResponse.status, callbackResponse.statusText);
+
     if (!callbackResponse.ok) {
       const errorText = await callbackResponse.text();
-      console.error('Failed to fetch from callbackURL:', callbackResponse.status, errorText);
-      await logWebhookCall(supabase, 'ACTIVITY_CALLBACK', dbUserId, false, 0, `CallbackURL fetch failed: ${callbackResponse.status}`);
-      return { success: false, message: `Failed to fetch activity data: ${callbackResponse.status}` };
+      console.error("❌ Erro ao chamar callbackURL:", callbackResponse.status, callbackResponse.statusText);
+      console.error('CallbackURL error response:', errorText);
+      await logWebhookCall(supabase, 'ACTIVITY_CALLBACK', dbUserId, false, 0, `CallbackURL fetch failed: ${callbackResponse.status} - ${errorText}`);
+      return { success: false, message: `Failed to fetch activity data: ${callbackResponse.status} - ${errorText}` };
     }
 
-    const activitiesData = await callbackResponse.json();
+    const responseText = await callbackResponse.text();
+    console.log("📡 Resposta completa do callbackURL:", responseText);
+    
+    let activitiesData;
+    try {
+      activitiesData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse callback response as JSON:', parseError);
+      console.error('Response text:', responseText);
+      await logWebhookCall(supabase, 'ACTIVITY_CALLBACK', dbUserId, false, 0, `Invalid JSON response from callbackURL`);
+      return { success: false, message: 'Invalid JSON response from callbackURL' };
+    }
     console.log('Activity data received:', { 
       count: Array.isArray(activitiesData) ? activitiesData.length : 'not array',
       sample: Array.isArray(activitiesData) && activitiesData.length > 0 ? Object.keys(activitiesData[0]) : 'N/A'
@@ -355,12 +392,14 @@ async function processActivityCallbackURL(supabase: any, userId: string, callbac
 
     console.log(`Finished processing activities. Processed: ${processedCount}, Duplicates: ${duplicateCount}, Total: ${activitiesData.length}`);
 
-    // Update backfill status if applicable
+    // Update backfill status to completed after successful processing
+    console.log(`🎯 Updating backfill status for user ${dbUserId} with ${processedCount} activities processed`);
     await updateBackfillStatus(supabase, dbUserId, processedCount);
 
     // Log webhook stats
     await logWebhookCall(supabase, 'ACTIVITY_CALLBACK', dbUserId, true, processedCount, null);
 
+    console.log(`✅ Successfully processed callback - Activities: ${processedCount}, Duplicates: ${duplicateCount}`);
     return { 
       success: true, 
       message: `Successfully processed ${processedCount} activities from callback (${duplicateCount} duplicates skipped)`,
