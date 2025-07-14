@@ -35,11 +35,10 @@ Deno.serve(async (req) => {
     const { userId, batchSize = 10 } = requestBody;
     const now = new Date();
 
-    // Find pending backfills that are ready to process
+    // Build query to find pending backfills that are ready to process
     let query = supabase
       .from('garmin_backfill_status')
       .select('*')
-      .in('status', ['pending', 'error'])
       .lt('retry_count', 3) // Only process if retry_count < max_retries (3)
       .order('requested_at', { ascending: true })
       .limit(batchSize);
@@ -49,10 +48,9 @@ Deno.serve(async (req) => {
       query = query.eq('user_id', userId);
     }
 
-    // For error status, only include if retry time has passed
+    // Filter for pending records OR error records that are ready for retry
     query = query.or(
-      'status.eq.pending,' +
-      `and(status.eq.error,or(next_retry_at.is.null,next_retry_at.lt.${now.toISOString()}))`
+      `status.eq.pending,and(status.eq.error,or(next_retry_at.is.null,next_retry_at.lt.${now.toISOString()}))`
     );
 
     const { data: pendingBackfills, error: queryError } = await query;
