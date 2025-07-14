@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
       .from('garmin_backfill_status')
       .select('*')
       .in('status', ['pending', 'error'])
-      .lt('retry_count', supabase.raw('max_retries'))
+      .lt('retry_count', 3) // Only process if retry_count < max_retries (3)
       .order('requested_at', { ascending: true })
       .limit(batchSize);
 
