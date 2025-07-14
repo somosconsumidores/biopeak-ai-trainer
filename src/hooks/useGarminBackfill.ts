@@ -51,6 +51,7 @@ export const useGarminBackfill = () => {
     if (!session) return;
 
     try {
+      console.log('[loadBackfillStatus] Making request to garmin-backfill...');
       const { data, error } = await supabase.functions.invoke('garmin-backfill', {
         method: 'GET',
         headers: {
@@ -63,8 +64,14 @@ export const useGarminBackfill = () => {
         return;
       }
 
+      console.log('[loadBackfillStatus] Response data:', data);
+      
       if (data?.backfillStatus) {
+        console.log('[loadBackfillStatus] Setting backfill status:', data.backfillStatus);
         setBackfillStatus(data.backfillStatus);
+      } else {
+        console.log('[loadBackfillStatus] No backfillStatus in response, setting empty array');
+        setBackfillStatus([]);
       }
     } catch (error) {
       console.error('Error loading backfill status:', error);
@@ -258,6 +265,9 @@ export const useGarminBackfill = () => {
       return acc;
     }, {} as Record<string, { total: number; completed: number; pending: number; errors: number; inProgress: number }>)
   };
+
+  console.log('[useGarminBackfill] Summary calculated:', summary);
+  console.log('[useGarminBackfill] Backfill status array:', backfillStatus);
 
   // Clean up stuck backfills
   const cleanupBackfills = async () => {

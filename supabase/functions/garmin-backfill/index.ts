@@ -262,11 +262,15 @@ serve(async (req) => {
 
     // GET request - return backfill status for user
     if (req.method === 'GET') {
+      console.log('[GET] Fetching backfill status for user:', userId);
+      
       const { data: backfillStatus, error } = await supabase
         .from('garmin_backfill_status')
         .select('*')
         .eq('user_id', userId)
         .order('requested_at', { ascending: false });
+
+      console.log('[GET] Query result - error:', error, 'data:', backfillStatus);
 
       if (error) {
         throw new Error('Failed to fetch backfill status');
