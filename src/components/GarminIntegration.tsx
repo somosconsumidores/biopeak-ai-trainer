@@ -431,7 +431,13 @@ const GarminIntegration = () => {
           ) : (
             <>
               <Button 
-                onClick={syncActivities}
+                onClick={() => {
+                  console.log('[GarminIntegration] ===== BUTTON CLICKED =====');
+                  console.log('[GarminIntegration] Current user:', user?.id);
+                  console.log('[GarminIntegration] Is syncing:', isSyncing);
+                  console.log('[GarminIntegration] Is connected:', isConnected);
+                  syncActivities();
+                }}
                 disabled={isSyncing}
                 variant="glass"
                 size="sm"
