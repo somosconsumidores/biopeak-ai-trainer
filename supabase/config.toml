@@ -41,3 +41,18 @@ verify_jwt = true
 
 [functions.garmin-manual-sync-test]
 verify_jwt = false
+
+[functions.garmin-backfill-cleanup]
+verify_jwt = false
+
+[functions.garmin-backfill-processor]
+verify_jwt = false
+
+[functions.garmin-manual-backfill]
+verify_jwt = true
+
+[functions.garmin-manual-metrics-test]
+verify_jwt = false
+
+[functions.garmin-test-callbacks]
+verify_jwt = false

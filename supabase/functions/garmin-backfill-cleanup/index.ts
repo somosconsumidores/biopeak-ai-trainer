@@ -22,11 +22,15 @@ serve(async (req) => {
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
     const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
     
-    // Find stuck backfills (pending > 1 hour or in_progress > 6 hours)
+    // Find stuck backfills that need retry
     const { data: stuckBackfills, error: stuckError } = await supabase
       .from('garmin_backfill_status')
       .select('*')
-      .or(`and(status.eq.pending,requested_at.lt.${oneHourAgo.toISOString()}),and(status.eq.in_progress,requested_at.lt.${sixHoursAgo.toISOString()})`);
+      .or(
+        `and(status.eq.pending,requested_at.lt.${oneHourAgo.toISOString()}),` +
+        `and(status.eq.in_progress,requested_at.lt.${sixHoursAgo.toISOString()}),` +
+        `and(status.eq.error,retry_count.lt.max_retries,next_retry_at.lt.${now.toISOString()})`
+      );
 
     if (stuckError) {
       console.error('[Backfill Cleanup] Error finding stuck backfills:', stuckError);
@@ -39,147 +43,121 @@ serve(async (req) => {
     let timeoutCount = 0;
 
     for (const backfill of stuckBackfills || []) {
-      console.log(`[Backfill Cleanup] Processing stuck backfill ${backfill.id} (status: ${backfill.status})`);
+      console.log(`[Backfill Cleanup] Processing backfill ${backfill.id} (status: ${backfill.status}, type: ${backfill.summary_type})`);
       
-      // Check if there are any activities in this period
-      const { data: activitiesInPeriod } = await supabase
-        .from('garmin_activities')
-        .select('id', { count: 'exact' })
-        .eq('user_id', backfill.user_id)
-        .gte('start_date', backfill.period_start)
-        .lte('start_date', backfill.period_end);
+      // Check if we should retry this backfill
+      if (backfill.retry_count >= backfill.max_retries) {
+        console.log(`[Backfill Cleanup] Max retries reached for backfill ${backfill.id}`);
+        timeoutCount++;
+        continue;
+      }
 
-      const activityCount = activitiesInPeriod?.length || 0;
-      
-      if (activityCount > 0) {
-        // Mark as completed if we have activities
-        console.log(`[Backfill Cleanup] Marking backfill ${backfill.id} as completed with ${activityCount} activities`);
+      // For completed error status, check if we need to retry
+      if (backfill.status === 'error' && backfill.next_retry_at && new Date(backfill.next_retry_at) > now) {
+        console.log(`[Backfill Cleanup] Backfill ${backfill.id} not ready for retry yet`);
+        continue;
+      }
+
+      // Check if there's relevant data for this summary type and period
+      let dataExists = false;
+      let dataCount = 0;
+
+      if (backfill.summary_type === 'dailies') {
+        const { data: healthData } = await supabase
+          .from('garmin_daily_health')
+          .select('id', { count: 'exact' })
+          .eq('user_id', backfill.user_id)
+          .gte('summary_date', backfill.period_start.split('T')[0])
+          .lte('summary_date', backfill.period_end.split('T')[0]);
+        dataCount = healthData?.length || 0;
+        dataExists = dataCount > 0;
+      } else if (backfill.summary_type === 'userMetrics') {
+        const { data: vo2Data } = await supabase
+          .from('garmin_vo2_max')
+          .select('id', { count: 'exact' })
+          .eq('user_id', backfill.user_id)
+          .gte('measurement_date', backfill.period_start.split('T')[0])
+          .lte('measurement_date', backfill.period_end.split('T')[0]);
+        dataCount = vo2Data?.length || 0;
+        dataExists = dataCount > 0;
+      }
+      // Add more data checks for other summary types as needed
+
+      if (dataExists) {
+        // Mark as completed if we have data
+        console.log(`[Backfill Cleanup] Marking backfill ${backfill.id} as completed with ${dataCount} records`);
         
         await supabase
           .from('garmin_backfill_status')
           .update({
             status: 'completed',
             completed_at: now.toISOString(),
-            activities_processed: activityCount,
+            activities_processed: dataCount,
             updated_at: now.toISOString()
           })
           .eq('id', backfill.id);
           
         retriedCount++;
       } else {
-        // Check if this backfill has been retried before
-        const hoursStuck = (now.getTime() - new Date(backfill.requested_at).getTime()) / (1000 * 60 * 60);
+        // Retry the backfill by calling the updated garmin-backfill function
+        console.log(`[Backfill Cleanup] Retrying backfill ${backfill.id} (attempt ${backfill.retry_count + 1}/${backfill.max_retries})`);
         
-        if (hoursStuck > 24) {
-          // Mark as error if stuck for more than 24 hours
-          console.log(`[Backfill Cleanup] Marking backfill ${backfill.id} as timeout (${hoursStuck.toFixed(1)} hours stuck)`);
-          
+        try {
+          // Calculate next retry time using the database function
+          const nextRetryTime = await supabase.rpc('calculate_next_retry', {
+            retry_count: backfill.retry_count
+          });
+
+          // Update retry information
           await supabase
             .from('garmin_backfill_status')
             .update({
-              status: 'error',
-              error_message: `Timeout: No activities received after ${hoursStuck.toFixed(1)} hours`,
+              retry_count: backfill.retry_count + 1,
+              next_retry_at: nextRetryTime.data,
               updated_at: now.toISOString()
             })
             .eq('id', backfill.id);
-            
-          timeoutCount++;
-        } else {
-          // Retry the backfill by calling the API again
-          console.log(`[Backfill Cleanup] Retrying backfill ${backfill.id}`);
-          
-          try {
-            // Get user's tokens
-            const { data: tokenData } = await supabase
-              .from('garmin_tokens')
-              .select('access_token, token_secret')
-              .eq('user_id', backfill.user_id)
-              .maybeSingle();
 
-            if (tokenData) {
-              // Retry the Garmin API call
-              const clientId = Deno.env.get('GARMIN_CLIENT_ID')!;
-              const clientSecret = Deno.env.get('GARMIN_CLIENT_SECRET')!;
-              
-              const backfillUrl = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
-              const summaryStartTimeInSeconds = Math.floor(new Date(backfill.period_start).getTime() / 1000);
-              const summaryEndTimeInSeconds = Math.floor(new Date(backfill.period_end).getTime() / 1000);
-              
-              const fullUrl = `${backfillUrl}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`;
-              
-              // Generate OAuth 1.0 signature (reusing logic from garmin-backfill)
-              const oauth = {
-                oauth_consumer_key: clientId,
-                oauth_token: tokenData.access_token,
-                oauth_signature_method: 'HMAC-SHA1',
-                oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-                oauth_nonce: Math.random().toString(36).substring(2, 15),
-                oauth_version: '1.0'
-              };
-              
-              const params = new URLSearchParams({
-                summaryStartTimeInSeconds: summaryStartTimeInSeconds.toString(),
-                summaryEndTimeInSeconds: summaryEndTimeInSeconds.toString(),
-                ...oauth
-              });
-              
-              const sortedParams = Array.from(params.entries())
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-                .join('&');
-              
-              const baseString = `GET&${encodeURIComponent(backfillUrl)}&${encodeURIComponent(sortedParams)}`;
-              const signingKey = `${encodeURIComponent(clientSecret)}&${encodeURIComponent(tokenData.token_secret)}`;
-              
-              const encoder = new TextEncoder();
-              const signingKeyData = encoder.encode(signingKey);
-              const baseStringData = encoder.encode(baseString);
-              
-              const cryptoKey = await crypto.subtle.importKey(
-                'raw',
-                signingKeyData,
-                { name: 'HMAC', hash: 'SHA-1' },
-                false,
-                ['sign']
-              );
-              
-              const signature = await crypto.subtle.sign('HMAC', cryptoKey, baseStringData);
-              const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-              
-              oauth.oauth_signature = signatureBase64;
-              
-              const authHeader = 'OAuth ' + Object.entries(oauth)
-                .map(([key, value]) => `${encodeURIComponent(key)}="${encodeURIComponent(value)}"`)
-                .join(', ');
-
-              const response = await fetch(fullUrl, {
-                method: 'GET',
-                headers: {
-                  'Authorization': authHeader,
-                  'Accept': 'application/json'
-                }
-              });
-
-              if (response.status === 202) {
-                console.log(`[Backfill Cleanup] Retry successful for backfill ${backfill.id}`);
-                
-                await supabase
-                  .from('garmin_backfill_status')
-                  .update({
-                    status: 'in_progress',
-                    updated_at: now.toISOString(),
-                    error_message: null
-                  })
-                  .eq('id', backfill.id);
-                  
-                retriedCount++;
-              } else {
-                console.log(`[Backfill Cleanup] Retry failed for backfill ${backfill.id}: ${response.status}`);
-              }
+          // Call the garmin-backfill function to retry
+          const { error: retryError } = await supabase.functions.invoke('garmin-backfill', {
+            body: {
+              periodStart: backfill.period_start,
+              periodEnd: backfill.period_end,
+              summaryTypes: [backfill.summary_type]
             }
-          } catch (retryError) {
+          });
+
+          if (!retryError) {
+            console.log(`[Backfill Cleanup] Retry initiated for backfill ${backfill.id}`);
+            retriedCount++;
+          } else {
             console.error(`[Backfill Cleanup] Error retrying backfill ${backfill.id}:`, retryError);
+            
+            // Mark as error if we've hit max retries
+            if (backfill.retry_count + 1 >= backfill.max_retries) {
+              await supabase
+                .from('garmin_backfill_status')
+                .update({
+                  status: 'error',
+                  error_message: `Max retries reached: ${retryError.message || 'Unknown error'}`,
+                  updated_at: now.toISOString()
+                })
+                .eq('id', backfill.id);
+              timeoutCount++;
+            }
           }
+        } catch (retryError) {
+          console.error(`[Backfill Cleanup] Error during retry process for backfill ${backfill.id}:`, retryError);
+          
+          // Update error count and potentially mark as failed
+          await supabase
+            .from('garmin_backfill_status')
+            .update({
+              retry_count: backfill.retry_count + 1,
+              error_message: `Retry error: ${retryError.message}`,
+              updated_at: now.toISOString()
+            })
+            .eq('id', backfill.id);
         }
       }
     }
