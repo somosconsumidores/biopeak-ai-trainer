@@ -153,7 +153,7 @@ const BackfillProgress = () => {
         <div className="flex items-center gap-2 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
           <TrendingUp className="w-4 h-4 text-green-600" />
           <span className="text-sm text-green-600">
-            Backfill concluído! {summary.totalActivitiesProcessed} atividades sincronizadas.
+            Backfill concluído! {summary.totalDataProcessed} atividades sincronizadas.
           </span>
         </div>
       )}

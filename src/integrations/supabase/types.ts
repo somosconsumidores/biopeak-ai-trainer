@@ -141,10 +141,16 @@ export type Database = {
           created_at: string
           error_message: string | null
           id: string
+          is_duplicate: boolean
+          max_retries: number
+          next_retry_at: string | null
           period_end: string
           period_start: string
+          rate_limit_reset_at: string | null
           requested_at: string
+          retry_count: number
           status: string
+          summary_type: string
           updated_at: string
           user_id: string
         }
@@ -154,10 +160,16 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          is_duplicate?: boolean
+          max_retries?: number
+          next_retry_at?: string | null
           period_end: string
           period_start: string
+          rate_limit_reset_at?: string | null
           requested_at?: string
+          retry_count?: number
           status?: string
+          summary_type?: string
           updated_at?: string
           user_id: string
         }
@@ -167,10 +179,16 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           id?: string
+          is_duplicate?: boolean
+          max_retries?: number
+          next_retry_at?: string | null
           period_end?: string
           period_start?: string
+          rate_limit_reset_at?: string | null
           requested_at?: string
+          retry_count?: number
           status?: string
+          summary_type?: string
           updated_at?: string
           user_id?: string
         }
@@ -719,6 +737,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_next_retry: {
+        Args: { retry_count: number; base_delay_minutes?: number }
+        Returns: string
+      }
       cleanup_expired_oauth_tokens: {
         Args: Record<PropertyKey, never>
         Returns: undefined

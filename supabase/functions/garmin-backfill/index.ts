@@ -9,7 +9,26 @@ const corsHeaders = {
 interface BackfillRequest {
   periodStart: string; // ISO date string
   periodEnd: string;   // ISO date string
+  summaryTypes?: string[]; // Array of summary types to backfill
 }
+
+// Garmin backfill endpoint mapping
+const GARMIN_BACKFILL_ENDPOINTS = {
+  dailies: 'https://apis.garmin.com/wellness-api/rest/backfill/dailies',
+  epochs: 'https://apis.garmin.com/wellness-api/rest/backfill/epochs',
+  sleeps: 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps',
+  bodyComps: 'https://apis.garmin.com/wellness-api/rest/backfill/bodyComps',
+  stressDetails: 'https://apis.garmin.com/wellness-api/rest/backfill/stressDetails',
+  userMetrics: 'https://apis.garmin.com/wellness-api/rest/backfill/userMetrics',
+  pulseOx: 'https://apis.garmin.com/wellness-api/rest/backfill/pulseOx',
+  respiration: 'https://apis.garmin.com/wellness-api/rest/backfill/respiration',
+  healthSnapshot: 'https://apis.garmin.com/wellness-api/rest/backfill/healthSnapshot',
+  hrv: 'https://apis.garmin.com/wellness-api/rest/backfill/hrv',
+  bloodPressures: 'https://apis.garmin.com/wellness-api/rest/backfill/bloodPressures',
+  skinTemp: 'https://apis.garmin.com/wellness-api/rest/backfill/skinTemp'
+} as const;
+
+type SummaryType = keyof typeof GARMIN_BACKFILL_ENDPOINTS;
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -42,7 +61,7 @@ serve(async (req) => {
     console.log('[Garmin Backfill] User authenticated:', user.id);
 
     if (req.method === 'POST') {
-      const { periodStart, periodEnd }: BackfillRequest = await req.json();
+      const { periodStart, periodEnd, summaryTypes = ['dailies'] }: BackfillRequest = await req.json();
       
       console.log('[Garmin Backfill] Requesting backfill for period:', { periodStart, periodEnd });
 
@@ -59,10 +78,10 @@ serve(async (req) => {
         throw new Error('Start date must be before end date');
       }
 
-      // Check if period is within 6 months limit (Garmin wellness API limit)
+      // Check if period is within 90 days limit (Garmin backfill API limit)
       const daysDifference = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysDifference > 180) {
-        throw new Error('Period cannot exceed 6 months (180 days)');
+      if (daysDifference > 90) {
+        throw new Error('Period cannot exceed 90 days per backfill request');
       }
 
       // Check if period is not in the future
@@ -70,10 +89,10 @@ serve(async (req) => {
         throw new Error('Start date cannot be in the future');
       }
 
-      // Get user's Garmin OAuth 2.0 tokens
+      // Get user's Garmin tokens
       const { data: tokenData, error: tokenError } = await supabase
         .from('garmin_tokens')
-        .select('access_token, refresh_token, expires_at')
+        .select('access_token, token_secret, consumer_key, expires_at')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -85,131 +104,125 @@ serve(async (req) => {
       const tokenExpiresAt = new Date(tokenData.expires_at);
       if (tokenExpiresAt <= now) {
         console.log('[Garmin Backfill] Token expired, attempting to refresh...');
-        // TODO: Implement token refresh logic here
+        // For OAuth 1.0a, tokens typically don't expire, but check anyway
         throw new Error('Token expired. Please reconnect to Garmin.');
       }
 
-      // Check if backfill already exists for this period
-      const { data: existingBackfill } = await supabase
-        .from('garmin_backfill_status')
-        .select('id, status')
-        .eq('user_id', user.id)
-        .eq('period_start', startDate.toISOString())
-        .eq('period_end', endDate.toISOString())
-        .maybeSingle();
+      // Validate summary types
+      const validSummaryTypes = summaryTypes.filter(type => 
+        type in GARMIN_BACKFILL_ENDPOINTS
+      ) as SummaryType[];
 
-      if (existingBackfill && existingBackfill.status !== 'error') {
-        return new Response(
-          JSON.stringify({ 
-            message: 'Backfill already exists for this period',
-            status: existingBackfill.status,
-            backfillId: existingBackfill.id
-          }),
-          { 
-            status: 200, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
+      if (validSummaryTypes.length === 0) {
+        throw new Error('No valid summary types provided');
       }
 
-      // Create or update backfill status record
-      const { data: backfillRecord, error: backfillError } = await supabase
-        .from('garmin_backfill_status')
-        .upsert({
-          user_id: user.id,
-          period_start: startDate.toISOString(),
-          period_end: endDate.toISOString(),
-          status: 'pending',
-          requested_at: new Date().toISOString(),
-          activities_processed: 0
-        }, {
-          onConflict: 'user_id,period_start,period_end'
-        })
-        .select()
-        .single();
+      // Process each summary type
+      const results = [];
+      const errors = [];
 
-      if (backfillError) {
-        console.error('[Garmin Backfill] Error creating backfill record:', backfillError);
-        throw new Error('Failed to create backfill record');
-      }
+      for (const summaryType of validSummaryTypes) {
+        try {
+          // Check if backfill already exists for this period and summary type
+          const { data: existingBackfill } = await supabase
+            .from('garmin_backfill_status')
+            .select('id, status, is_duplicate')
+            .eq('user_id', user.id)
+            .eq('period_start', startDate.toISOString())
+            .eq('period_end', endDate.toISOString())
+            .eq('summary_type', summaryType)
+            .maybeSingle();
 
-      // Update status to in_progress
-      await supabase
-        .from('garmin_backfill_status')
-        .update({ status: 'in_progress' })
-        .eq('id', backfillRecord.id);
+          let backfillRecord;
 
-      // Make backfill request to Garmin API using OAuth 2.0 Bearer token
-      try {
-        const backfillUrl = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
-        
-        // Convert to UNIX timestamps in seconds (as required by Garmin API)
-        const summaryStartTimeInSeconds = Math.floor(startDate.getTime() / 1000);
-        const summaryEndTimeInSeconds = Math.floor(endDate.getTime() / 1000);
-        
-        const fullUrl = `${backfillUrl}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`;
-        
-        console.log('[Garmin Backfill] Making OAuth 2.0 request to:', fullUrl);
-        console.log('[Garmin Backfill] Period in seconds:', { summaryStartTimeInSeconds, summaryEndTimeInSeconds });
-
-        const response = await fetch(fullUrl, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${tokenData.access_token}`,
-            'Accept': 'application/json'
-          }
-        });
-
-        console.log('[Garmin Backfill] Garmin API response status:', response.status);
-        console.log('[Garmin Backfill] Response headers:', Object.fromEntries(response.headers.entries()));
-
-        if (response.status === 202) {
-          // Backfill request accepted - data will arrive via webhook
-          console.log('[Garmin Backfill] Backfill request accepted by Garmin');
-          
-          return new Response(
-            JSON.stringify({ 
-              message: 'Backfill request submitted successfully. Data will arrive via webhooks.',
-              status: 'in_progress',
-              backfillId: backfillRecord.id,
-              period: { start: periodStart, end: periodEnd },
-              note: 'Activities will be automatically synced via webhook notifications. Please ensure webhooks are configured in the Garmin Developer Portal.'
-            }),
-            { 
-              status: 202, 
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          if (existingBackfill) {
+            if (existingBackfill.status !== 'error' && !existingBackfill.is_duplicate) {
+              results.push({
+                summaryType,
+                status: 'existing',
+                message: `Backfill already exists for ${summaryType}`,
+                backfillId: existingBackfill.id
+              });
+              continue;
             }
-          );
-        } else {
-          // Handle error from Garmin API
-          const errorText = await response.text();
-          console.error('[Garmin Backfill] Garmin API error:', response.status, errorText);
-          
-          // Update backfill status to error
+            backfillRecord = existingBackfill;
+          } else {
+            // Create new backfill record
+            const { data: newRecord, error: backfillError } = await supabase
+              .from('garmin_backfill_status')
+              .insert({
+                user_id: user.id,
+                period_start: startDate.toISOString(),
+                period_end: endDate.toISOString(),
+                summary_type: summaryType,
+                status: 'pending',
+                requested_at: new Date().toISOString(),
+                activities_processed: 0,
+                retry_count: 0
+              })
+              .select()
+              .single();
+
+            if (backfillError) {
+              console.error(`[Garmin Backfill] Error creating backfill record for ${summaryType}:`, backfillError);
+              errors.push(`Failed to create backfill record for ${summaryType}`);
+              continue;
+            }
+            backfillRecord = newRecord;
+          }
+
+          // Update status to in_progress
           await supabase
             .from('garmin_backfill_status')
             .update({ 
-              status: 'error',
-              error_message: `Garmin API error: ${response.status} - ${errorText}`
+              status: 'in_progress',
+              is_duplicate: false,
+              retry_count: 0,
+              next_retry_at: null
             })
             .eq('id', backfillRecord.id);
 
-          throw new Error(`Garmin API error: ${response.status} - ${errorText}`);
-        }
-      } catch (apiError) {
-        console.error('[Garmin Backfill] API request failed:', apiError);
-        
-        // Update backfill status to error
-        await supabase
-          .from('garmin_backfill_status')
-          .update({ 
-            status: 'error',
-            error_message: `API request failed: ${apiError.message}`
-          })
-          .eq('id', backfillRecord.id);
+          // Make backfill request to Garmin API
+          const result = await makeBackfillRequest(
+            summaryType, 
+            startDate, 
+            endDate, 
+            tokenData, 
+            supabase, 
+            backfillRecord.id
+          );
 
-        throw apiError;
+          results.push({
+            summaryType,
+            status: result.success ? 'requested' : 'error',
+            message: result.message,
+            backfillId: backfillRecord.id
+          });
+
+        } catch (error) {
+          console.error(`[Garmin Backfill] Error processing ${summaryType}:`, error);
+          errors.push(`Error processing ${summaryType}: ${error.message}`);
+        }
       }
+
+      // Return results
+      const hasSuccessful = results.some(r => r.status === 'requested');
+      const status = hasSuccessful ? 202 : (results.length > 0 ? 200 : 500);
+
+      return new Response(
+        JSON.stringify({
+          message: hasSuccessful 
+            ? 'Backfill requests submitted successfully'
+            : 'Some backfill requests failed or already existed',
+          results,
+          errors: errors.length > 0 ? errors : undefined,
+          period: { start: periodStart, end: periodEnd }
+        }),
+        { 
+          status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
     // GET request - return backfill status for user
@@ -252,3 +265,151 @@ serve(async (req) => {
     );
   }
 });
+
+// Helper function to make backfill request to Garmin API
+async function makeBackfillRequest(
+  summaryType: SummaryType,
+  startDate: Date,
+  endDate: Date,
+  tokenData: any,
+  supabase: any,
+  backfillId: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const backfillUrl = GARMIN_BACKFILL_ENDPOINTS[summaryType];
+    
+    // Convert to UNIX timestamps in seconds (as required by Garmin API)
+    const summaryStartTimeInSeconds = Math.floor(startDate.getTime() / 1000);
+    const summaryEndTimeInSeconds = Math.floor(endDate.getTime() / 1000);
+    
+    const fullUrl = `${backfillUrl}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`;
+    
+    console.log(`[Garmin Backfill] Making request for ${summaryType} to:`, fullUrl);
+
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    console.log(`[Garmin Backfill] ${summaryType} API response status:`, response.status);
+
+    if (response.status === 202) {
+      // Backfill request accepted - data will arrive via webhook
+      console.log(`[Garmin Backfill] ${summaryType} backfill request accepted by Garmin`);
+      return {
+        success: true,
+        message: `${summaryType} backfill request submitted successfully. Data will arrive via webhooks.`
+      };
+    } else if (response.status === 409) {
+      // Duplicate request
+      console.log(`[Garmin Backfill] Duplicate request for ${summaryType}`);
+      
+      await supabase
+        .from('garmin_backfill_status')
+        .update({ 
+          status: 'completed',
+          is_duplicate: true,
+          error_message: 'Duplicate request - data already requested for this period'
+        })
+        .eq('id', backfillId);
+
+      return {
+        success: true,
+        message: `${summaryType} backfill already requested for this period`
+      };
+    } else if (response.status === 429) {
+      // Rate limited - schedule retry
+      console.log(`[Garmin Backfill] Rate limited for ${summaryType}`);
+      
+      const retryAfter = response.headers.get('Retry-After');
+      const retryDelay = retryAfter ? parseInt(retryAfter) * 1000 : 60000; // Default 1 minute
+      const nextRetryAt = new Date(Date.now() + retryDelay);
+
+      await supabase
+        .from('garmin_backfill_status')
+        .update({ 
+          status: 'pending',
+          next_retry_at: nextRetryAt.toISOString(),
+          rate_limit_reset_at: nextRetryAt.toISOString(),
+          error_message: `Rate limited. Retry scheduled for ${nextRetryAt.toISOString()}`
+        })
+        .eq('id', backfillId);
+
+      return {
+        success: false,
+        message: `${summaryType} request rate limited. Retry scheduled for ${nextRetryAt.toISOString()}`
+      };
+    } else {
+      // Handle other errors
+      const errorText = await response.text();
+      console.error(`[Garmin Backfill] ${summaryType} API error:`, response.status, errorText);
+      
+      // Determine if we should retry
+      const shouldRetry = response.status >= 500 || response.status === 403; // Server errors or auth issues
+      
+      if (shouldRetry) {
+        // Get current retry count
+        const { data: currentRecord } = await supabase
+          .from('garmin_backfill_status')
+          .select('retry_count, max_retries')
+          .eq('id', backfillId)
+          .single();
+
+        const retryCount = (currentRecord?.retry_count || 0) + 1;
+        const maxRetries = currentRecord?.max_retries || 3;
+
+        if (retryCount <= maxRetries) {
+          // Schedule retry with exponential backoff
+          const nextRetryAt = new Date(Date.now() + (Math.pow(2, retryCount) * 5 * 60 * 1000)); // 5min, 10min, 20min...
+
+          await supabase
+            .from('garmin_backfill_status')
+            .update({ 
+              status: 'pending',
+              retry_count: retryCount,
+              next_retry_at: nextRetryAt.toISOString(),
+              error_message: `API error (attempt ${retryCount}/${maxRetries}): ${response.status} - ${errorText}`
+            })
+            .eq('id', backfillId);
+
+          return {
+            success: false,
+            message: `${summaryType} API error. Retry ${retryCount}/${maxRetries} scheduled for ${nextRetryAt.toISOString()}`
+          };
+        }
+      }
+
+      // Final error - no more retries
+      await supabase
+        .from('garmin_backfill_status')
+        .update({ 
+          status: 'error',
+          error_message: `Garmin API error: ${response.status} - ${errorText}`
+        })
+        .eq('id', backfillId);
+
+      return {
+        success: false,
+        message: `${summaryType} API error: ${response.status} - ${errorText}`
+      };
+    }
+  } catch (error) {
+    console.error(`[Garmin Backfill] ${summaryType} request failed:`, error);
+    
+    await supabase
+      .from('garmin_backfill_status')
+      .update({ 
+        status: 'error',
+        error_message: `Request failed: ${error.message}`
+      })
+      .eq('id', backfillId);
+
+    return {
+      success: false,
+      message: `${summaryType} request failed: ${error.message}`
+    };
+  }
+}

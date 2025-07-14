@@ -7,14 +7,14 @@ import { Clock, CheckCircle, AlertCircle, XCircle, RefreshCw, Calendar } from "l
 import { useGarminBackfill } from "@/hooks/useGarminBackfill";
 import { format } from "date-fns";
 
+import ManualBackfillDialog from "./ManualBackfillDialog";
+
 interface GarminBackfillStatusProps {
   onInitiateBackfill?: () => void;
-  onManualBackfill?: () => void;
 }
 
 const GarminBackfillStatus: React.FC<GarminBackfillStatusProps> = ({
-  onInitiateBackfill,
-  onManualBackfill
+  onInitiateBackfill
 }) => {
   const { backfillStatus, summary, isLoading, isInitiating, loadBackfillStatus } = useGarminBackfill();
 
@@ -94,7 +94,7 @@ const GarminBackfillStatus: React.FC<GarminBackfillStatusProps> = ({
             <div className="text-sm text-muted-foreground">In Progress</div>
           </div>
           <div className="text-center p-3 bg-muted rounded-lg">
-            <div className="text-2xl font-bold text-orange-600">{summary.totalActivitiesProcessed}</div>
+            <div className="text-2xl font-bold text-orange-600">{summary.totalDataProcessed}</div>
             <div className="text-sm text-muted-foreground">Activities Synced</div>
           </div>
         </div>
@@ -123,14 +123,15 @@ const GarminBackfillStatus: React.FC<GarminBackfillStatusProps> = ({
             </Button>
           )}
           
-          <Button
-            variant="outline"
-            onClick={onManualBackfill}
-            disabled={isLoading || isInitiating}
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Manual Backfill
-          </Button>
+          <ManualBackfillDialog>
+            <Button
+              variant="outline"
+              disabled={isLoading || isInitiating}
+            >
+              <Calendar className="h-4 w-4 mr-2" />
+              Manual Backfill
+            </Button>
+          </ManualBackfillDialog>
         </div>
 
         {/* Backfill Records */}

@@ -393,7 +393,6 @@ const GarminSettings = () => {
           {/* Backfill Status Details */}
           <GarminBackfillStatus 
             onInitiateBackfill={() => initiateBackfill(6)}
-            onManualBackfill={() => setShowManualBackfill(true)}
           />
 
           {/* Manual Backfill Dialog */}
